@@ -1,5 +1,17 @@
-import { UserModel } from '../models/user-model';
+import { UserModel, type Role } from '../models/user-model';
 import { AppError } from '../utils/app-error';
+
+type ListUsersInput = {
+    search?: string;
+    role?: Role;
+    page: number;
+    limit: number;
+};
+
+// To prevent regex semantics in user search input
+function escapeRegex(input: string) {
+    return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 export class AdminService {
     static async promote(targetUsername: string) {
@@ -69,5 +81,36 @@ export class AdminService {
         await user.deleteOne();
 
         return username;
+    }
+
+    static async listUsers({ search, role, page, limit }: ListUsersInput) {
+        const filter: Record<string, unknown> = {};
+
+        if (role) {
+            filter.role = role;
+        }
+
+        if (search) {
+            const escapedSearch = escapeRegex(search);
+            const regex = new RegExp(escapedSearch, 'i');
+            filter.$or = [{ username: regex }, { displayName: regex }, { email: regex }];
+        }
+
+        const skip = (page - 1) * limit;
+
+        const [users, total] = await Promise.all([
+            UserModel.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
+            UserModel.countDocuments(filter),
+        ]);
+
+        return {
+            users: users.map((user) => user.toJSON()),
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages: Math.ceil(total / limit),
+            },
+        };
     }
 }

@@ -2,6 +2,8 @@ import type { Request, Response, NextFunction } from 'express';
 import { getAuth } from '../utils/auth';
 import { AppError } from '../utils/app-error';
 import { AdminService } from '../services/admin-service';
+import type { ValidatedQueryRequest } from '../middleware/validate';
+import type { ListUsersQuery } from '../validation/admin-validation';
 
 // This page should eventually be where admins have CRUD access to questions
 export class AdminController {
@@ -14,6 +16,25 @@ export class AdminController {
                 message: 'Admin home',
                 auth,
             });
+        } catch (err) {
+            next(err);
+        }
+    }
+
+    static async listUsers(req: Request, res: Response, next: NextFunction) {
+        try {
+            const auth = getAuth(req);
+            if (!auth) return next(AppError.unauthorized('Unauthorized'));
+
+            const { search, role, page, limit } = (req as ValidatedQueryRequest<ListUsersQuery>)
+                .validatedQuery ?? {
+                page: 1,
+                limit: 10,
+            };
+
+            const result = await AdminService.listUsers({ search, role, page, limit });
+
+            return res.status(200).json(result);
         } catch (err) {
             next(err);
         }
@@ -59,9 +80,11 @@ export class AdminController {
             if (!auth) return next(AppError.unauthorized('Unauthorized'));
 
             const username = req.params.username;
+
             if (typeof username !== 'string') {
                 return next(AppError.badRequest('Invalid username parameter'));
             }
+
             const deletedUsername = await AdminService.deleteUser(auth.userId, username);
 
             return res.status(200).json({
