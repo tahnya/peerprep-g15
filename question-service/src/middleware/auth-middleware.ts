@@ -30,7 +30,8 @@ export function requireAuth(req: Request, _res: Response, next: NextFunction) {
 
         (req as AuthenticatedRequest).auth = { userId, role };
         return next();
-    } catch {
+    } catch (err) {
+        console.error('JWT verify error:', err);
         return next(AppError.unauthorized('Invalid or expired token'));
     }
 }
