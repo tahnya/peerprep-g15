@@ -4,9 +4,12 @@ import type { MatchRequest, MatchResult, QueueEntry, QueueStatus } from '../mode
 const queueByCriteria = new Map<string, QueueEntry[]>();
 const matchByUserId = new Map<string, MatchResult>();
 
-// Matching policy: t = 0 exact match, t = 15s topic-only expansion, t = 30s FIFO fallback expansion.
+// Matching policy: t = 0 exact match, t = 15s topic-only expansion, 
+// t = 30s FIFO fallback expansion, t = 60s give up and timeout. 
+// Within each stage, longest-waiting eligible user is selected for fairness.
 const TOPIC_EXPANSION_WAIT_MS = 15_000;
 const FIFO_EXPANSION_WAIT_MS = 30_000;
+const QUEUE_TIMEOUT_MS = 60_000;
 
 // Normalizes topic+difficulty into a stable bucket key for queue grouping.
 function createCriteriaKey(topic: string, difficulty: string) {
@@ -16,6 +19,24 @@ function createCriteriaKey(topic: string, difficulty: string) {
 // Returns how long a queued user has waited in milliseconds.
 function getWaitedMs(entry: QueueEntry, nowMs: number) {
     return Math.max(0, nowMs - new Date(entry.joinedAt).getTime());
+}
+
+// Determines if a queued user has exceeded the maximum wait time and should be timed out.
+function isTimedOut(entry: QueueEntry, nowMs: number) {
+    return getWaitedMs(entry, nowMs) >= QUEUE_TIMEOUT_MS;
+}
+
+// Removes timed-out users from all queues so they are never considered for matching.
+function purgeTimedOutEntries(nowMs: number) {
+    for (const [criteriaKey, queue] of queueByCriteria.entries()) {
+        const activeQueue = queue.filter((entry) => !isTimedOut(entry, nowMs));
+        if (activeQueue.length === 0) {
+            queueByCriteria.delete(criteriaKey);
+            continue;
+        }
+
+        queueByCriteria.set(criteriaKey, activeQueue);
+    }
 }
 
 // Assigns candidate stage: 0 exact match, 1 topic-only after wait, 2 FIFO fallback after longer wait.
@@ -91,8 +112,7 @@ function findQueuedUser(userId: string) {
 }
 
 // Finds and removes the best eligible waiting user across all queues.
-function findBestWaitingCandidate(joiningUser: QueueEntry) {
-    const nowMs = Date.now();
+function findBestWaitingCandidate(joiningUser: QueueEntry, nowMs: number) {
 
     let selectedCriteriaKey: string | null = null;
     let selectedIndex = -1;
@@ -137,23 +157,25 @@ function findBestWaitingCandidate(joiningUser: QueueEntry) {
 }
 
 // Attempts to match immediately from staged policy; otherwise enqueues the user.
-export function joinQueue(request: MatchRequest) {
+export function joinQueue(request: MatchRequest, nowMs = Date.now()) {
+    purgeTimedOutEntries(nowMs);
+
     const criteriaKey = createCriteriaKey(request.topic, request.difficulty);
     const existingQueue = queueByCriteria.get(criteriaKey) ?? [];
     const entry: QueueEntry = {
         ...request,
         topic: request.topic.trim(),
-        joinedAt: new Date().toISOString(),
+        joinedAt: new Date(nowMs).toISOString(),
     };
 
-    const waitingUser = findBestWaitingCandidate(entry);
+    const waitingUser = findBestWaitingCandidate(entry, nowMs);
     if (waitingUser) {
         const match: MatchResult = {
             matchId: randomUUID(),
             userIds: [waitingUser.userId, entry.userId],
             topic: entry.topic,
             difficulty: entry.difficulty,
-            createdAt: new Date().toISOString(),
+            createdAt: new Date(nowMs).toISOString(),
         };
 
         matchByUserId.set(waitingUser.userId, match);
@@ -179,7 +201,7 @@ export function leaveQueue(userId: string) {
 }
 
 // Returns matched/queued/not_found state for a given user.
-export function getQueueStatus(userId: string): QueueStatus {
+export function getQueueStatus(userId: string, nowMs = Date.now()): QueueStatus {
     const match = matchByUserId.get(userId);
     if (match) {
         return {
@@ -189,9 +211,24 @@ export function getQueueStatus(userId: string): QueueStatus {
         };
     }
 
-    for (const queue of queueByCriteria.values()) {
-        const entry = queue.find((item) => item.userId === userId);
-        if (entry) {
+    for (const [criteriaKey, queue] of queueByCriteria.entries()) {
+        const index = queue.findIndex((item) => item.userId === userId);
+        if (index >= 0) {
+            const entry = queue[index];
+            if (isTimedOut(entry, nowMs)) {
+                queue.splice(index, 1);
+                if (queue.length === 0) {
+                    queueByCriteria.delete(criteriaKey);
+                } else {
+                    queueByCriteria.set(criteriaKey, queue);
+                }
+
+                return {
+                    userId,
+                    state: 'timed_out',
+                };
+            }
+
             return {
                 userId,
                 state: 'queued',
@@ -207,7 +244,8 @@ export function getQueueStatus(userId: string): QueueStatus {
 }
 
 // Flattens all criteria buckets into a single queue snapshot for debugging/admin views.
-export function listQueuedUsers() {
+export function listQueuedUsers(nowMs = Date.now()) {
+    purgeTimedOutEntries(nowMs);
     return Array.from(queueByCriteria.values()).flat();
 }
 

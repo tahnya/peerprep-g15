@@ -19,7 +19,7 @@ export interface MatchResult {
 	createdAt: string;
 }
 
-export type QueueState = 'queued' | 'matched' | 'not_found';
+export type QueueState = 'queued' | 'matched' | 'timed_out' | 'not_found';
 
 export interface QueueStatus {
 	userId: string;

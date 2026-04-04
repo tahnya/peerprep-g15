@@ -6,6 +6,7 @@ import jwt from 'jsonwebtoken';
 import { createApp } from '../app';
 import {
     getQueueStatus,
+    joinQueue,
     listQueuedUsers,
     pickBestWaitingUserIndex,
     resetMatchingState,
@@ -414,4 +415,53 @@ test('edge case: in-memory queue state is lost after reset (restart simulation)'
         userId: 'user-restart',
         state: 'not_found',
     });
+});
+
+test('queued user times out after 1 minute and is removed from queue', () => {
+    const joinedAtMs = new Date('2026-04-04T10:00:00.000Z').getTime();
+    joinQueue(
+        {
+            userId: 'user-timeout',
+            topic: 'graphs',
+            difficulty: 'easy',
+        },
+        joinedAtMs,
+    );
+
+    const timedOutStatus = getQueueStatus('user-timeout', joinedAtMs + 60_000);
+    assert.equal(timedOutStatus.state, 'timed_out');
+
+    const queueAfterTimeout = listQueuedUsers(joinedAtMs + 60_000);
+    assert.equal(queueAfterTimeout.length, 0);
+
+    const statusAfterRemoval = getQueueStatus('user-timeout', joinedAtMs + 60_001);
+    assert.equal(statusAfterRemoval.state, 'not_found');
+});
+
+test('expired queued users are never matched with new joiners', () => {
+    const baseTimeMs = new Date('2026-04-04T11:00:00.000Z').getTime();
+
+    const firstJoin = joinQueue(
+        {
+            userId: 'user-expired',
+            topic: 'arrays',
+            difficulty: 'medium',
+        },
+        baseTimeMs,
+    );
+    assert.equal(firstJoin.state, 'queued');
+
+    const secondJoin = joinQueue(
+        {
+            userId: 'user-fresh',
+            topic: 'arrays',
+            difficulty: 'medium',
+        },
+        baseTimeMs + 60_000,
+    );
+
+    assert.equal(secondJoin.state, 'queued');
+    const currentQueue = listQueuedUsers(baseTimeMs + 60_000);
+    assert.equal(currentQueue.length, 1);
+    assert.equal(currentQueue[0].userId, 'user-fresh');
 });
