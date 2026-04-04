@@ -4,7 +4,12 @@ import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import jwt from 'jsonwebtoken';
 import { createApp } from '../app';
-import { pickBestWaitingUserIndex, resetMatchingState } from '../services/matching-service';
+import {
+    getQueueStatus,
+    listQueuedUsers,
+    pickBestWaitingUserIndex,
+    resetMatchingState,
+} from '../services/matching-service';
 import type { QueueEntry } from '../models/matching-model';
 
 let server: Server;
@@ -271,4 +276,142 @@ test('queue priority falls back to FIFO after second wait window', () => {
         new Date('2026-04-04T10:00:31.000Z').getTime(),
     );
     assert.equal(selectedIndex, 0);
+});
+
+test('edge case: duplicate join from the same user is not idempotent', async () => {
+    // Why this matters: repeated clicks/retries can unexpectedly create a self-match response.
+    const token = createToken('user-dup');
+
+    const firstJoin = await request('POST', '/matching/join', {
+        userId: 'user-dup',
+        topic: 'graphs',
+        difficulty: 'easy',
+    }, token);
+    const secondJoin = await request('POST', '/matching/join', {
+        userId: 'user-dup',
+        topic: 'graphs',
+        difficulty: 'easy',
+    }, token);
+
+    assert.equal(firstJoin.status, 202);
+    assert.equal(secondJoin.status, 200);
+
+    const secondJoinJson = secondJoin.json as { match: { userIds: [string, string] } };
+    assert.deepEqual(secondJoinJson.match.userIds, ['user-dup', 'user-dup']);
+});
+
+test('edge case: repeated join can self-match the same user id', async () => {
+    // Why this matters: a user can be matched with themselves, which is logically invalid.
+    const token = createToken('user-self');
+
+    const firstJoin = await request('POST', '/matching/join', {
+        userId: 'user-self',
+        topic: 'arrays',
+        difficulty: 'medium',
+    }, token);
+    const secondJoin = await request('POST', '/matching/join', {
+        userId: 'user-self',
+        topic: 'arrays',
+        difficulty: 'medium',
+    }, token);
+
+    assert.equal(firstJoin.status, 202);
+    assert.equal(secondJoin.status, 200);
+
+    const secondJoinJson = secondJoin.json as { match: { userIds: [string, string] } };
+    assert.deepEqual(secondJoinJson.match.userIds, ['user-self', 'user-self']);
+});
+
+test('edge case: matched state cannot be cleared through leave endpoint', async () => {
+    // Why this matters: once matched, there is no API path to clear match state in memory.
+    const tokenA = createToken('user-stale-a');
+    const tokenB = createToken('user-stale-b');
+
+    const firstJoin = await request('POST', '/matching/join', {
+        userId: 'user-stale-a',
+        topic: 'dp',
+        difficulty: 'hard',
+    }, tokenA);
+    assert.equal(firstJoin.status, 202);
+
+    const secondJoin = await request('POST', '/matching/join', {
+        userId: 'user-stale-b',
+        topic: 'dp',
+        difficulty: 'hard',
+    }, tokenB);
+    assert.equal(secondJoin.status, 200);
+
+    const left = await request('POST', '/matching/leave', {
+        userId: 'user-stale-a',
+    }, tokenA);
+    assert.equal(left.status, 404);
+
+    const status = getQueueStatus('user-stale-a');
+    assert.equal(status.state, 'matched');
+});
+
+test('edge case: expansion boundaries activate exactly at 15s and 30s', () => {
+    // Why this matters: tiny timing differences at threshold boundaries can change who gets matched.
+    const waitingQueue: QueueEntry[] = [
+        {
+            userId: 'user-topic-only',
+            topic: 'trees',
+            difficulty: 'easy',
+            joinedAt: '2026-04-04T10:00:00.000Z',
+        },
+        {
+            userId: 'user-fifo',
+            topic: 'arrays',
+            difficulty: 'hard',
+            joinedAt: '2026-04-04T10:00:01.000Z',
+        },
+    ];
+
+    const joiningUser: QueueEntry = {
+        userId: 'user-join',
+        topic: 'trees',
+        difficulty: 'medium',
+        joinedAt: '2026-04-04T10:02:00.000Z',
+    };
+
+    const topicExpansionBoundaryIndex = pickBestWaitingUserIndex(
+        waitingQueue,
+        joiningUser,
+        new Date('2026-04-04T10:00:15.000Z').getTime(),
+    );
+    assert.equal(topicExpansionBoundaryIndex, 0);
+
+    const fifoJoiningUser: QueueEntry = {
+        userId: 'user-join-fifo',
+        topic: 'graphs',
+        difficulty: 'medium',
+        joinedAt: '2026-04-04T10:02:00.000Z',
+    };
+    const fifoBoundaryIndex = pickBestWaitingUserIndex(
+        waitingQueue,
+        fifoJoiningUser,
+        new Date('2026-04-04T10:00:30.000Z').getTime(),
+    );
+    assert.equal(fifoBoundaryIndex, 0);
+});
+
+test('edge case: in-memory queue state is lost after reset (restart simulation)', async () => {
+    // Why this matters: process restarts clear queue state because data is held in memory only.
+    const token = createToken('user-restart');
+
+    const queued = await request('POST', '/matching/join', {
+        userId: 'user-restart',
+        topic: 'strings',
+        difficulty: 'easy',
+    }, token);
+    assert.equal(queued.status, 202);
+
+    resetMatchingState();
+
+    const statusAfterReset = await request('GET', '/matching/status/user-restart', undefined, token);
+    assert.equal(statusAfterReset.status, 200);
+    assert.deepEqual(statusAfterReset.json, {
+        userId: 'user-restart',
+        state: 'not_found',
+    });
 });
