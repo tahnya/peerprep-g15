@@ -101,3 +101,8 @@ export function getQueueStatus(userId: string): QueueStatus {
 export function listQueuedUsers() {
     return Array.from(queueByCriteria.values()).flat();
 }
+
+export function resetMatchingState() {
+    queueByCriteria.clear();
+    matchByUserId.clear();
+}
