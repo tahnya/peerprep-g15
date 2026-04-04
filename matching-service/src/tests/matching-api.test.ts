@@ -139,7 +139,7 @@ test('GET /matching/status/:userId reports queued state', async () => {
     assert.equal(statusJson.entry?.difficulty, 'medium');
 });
 
-test('queue priority picks waiting user with closest proficiency distance', () => {
+test('queue priority always prefers exact topic+difficulty match first', () => {
     const waitingQueue: QueueEntry[] = [
         {
             userId: 'user-p1',
@@ -151,8 +151,7 @@ test('queue priority picks waiting user with closest proficiency distance', () =
         {
             userId: 'user-p2',
             topic: 'graphs',
-            difficulty: 'hard',
-            proficiency: 8,
+            difficulty: 'easy',
             joinedAt: '2026-04-04T10:01:00.000Z',
         },
     ];
@@ -161,28 +160,29 @@ test('queue priority picks waiting user with closest proficiency distance', () =
         userId: 'user-new',
         topic: 'graphs',
         difficulty: 'hard',
-        proficiency: 7,
         joinedAt: '2026-04-04T10:02:00.000Z',
     };
 
-    const selectedIndex = pickBestWaitingUserIndex(waitingQueue, joiningUser);
-    assert.equal(selectedIndex, 1);
+    const selectedIndex = pickBestWaitingUserIndex(
+        waitingQueue,
+        joiningUser,
+        new Date('2026-04-04T10:02:00.000Z').getTime(),
+    );
+    assert.equal(selectedIndex, 0);
 });
 
-test('queue priority uses FIFO when proficiency distance is tied', () => {
+test('queue priority expands to topic-only after first wait window', () => {
     const waitingQueue: QueueEntry[] = [
         {
             userId: 'user-f1',
             topic: 'dp',
-            difficulty: 'medium',
-            proficiency: 4,
+            difficulty: 'easy',
             joinedAt: '2026-04-04T10:00:00.000Z',
         },
         {
             userId: 'user-f2',
-            topic: 'dp',
+            topic: 'arrays',
             difficulty: 'medium',
-            proficiency: 6,
             joinedAt: '2026-04-04T10:01:00.000Z',
         },
     ];
@@ -191,10 +191,44 @@ test('queue priority uses FIFO when proficiency distance is tied', () => {
         userId: 'user-later',
         topic: 'dp',
         difficulty: 'medium',
-        proficiency: 5,
         joinedAt: '2026-04-04T10:02:00.000Z',
     };
 
-    const selectedIndex = pickBestWaitingUserIndex(waitingQueue, joiningUser);
+    const selectedIndex = pickBestWaitingUserIndex(
+        waitingQueue,
+        joiningUser,
+        new Date('2026-04-04T10:00:16.000Z').getTime(),
+    );
+    assert.equal(selectedIndex, 0);
+});
+
+test('queue priority falls back to FIFO after second wait window', () => {
+    const waitingQueue: QueueEntry[] = [
+        {
+            userId: 'user-global-1',
+            topic: 'strings',
+            difficulty: 'easy',
+            joinedAt: '2026-04-04T10:00:00.000Z',
+        },
+        {
+            userId: 'user-global-2',
+            topic: 'graphs',
+            difficulty: 'hard',
+            joinedAt: '2026-04-04T10:00:05.000Z',
+        },
+    ];
+
+    const joiningUser: QueueEntry = {
+        userId: 'user-incoming',
+        topic: 'dp',
+        difficulty: 'medium',
+        joinedAt: '2026-04-04T10:02:00.000Z',
+    };
+
+    const selectedIndex = pickBestWaitingUserIndex(
+        waitingQueue,
+        joiningUser,
+        new Date('2026-04-04T10:00:31.000Z').getTime(),
+    );
     assert.equal(selectedIndex, 0);
 });

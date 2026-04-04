@@ -4,46 +4,68 @@ import type { MatchRequest, MatchResult, QueueEntry, QueueStatus } from '../mode
 const queueByCriteria = new Map<string, QueueEntry[]>();
 const matchByUserId = new Map<string, MatchResult>();
 
+// Matching policy: t = 0 exact match, t = 15s topic-only expansion, t = 30s FIFO fallback expansion.
+const TOPIC_EXPANSION_WAIT_MS = 15_000;
+const FIFO_EXPANSION_WAIT_MS = 30_000;
+
 // Normalizes topic+difficulty into a stable bucket key for queue grouping.
 function createCriteriaKey(topic: string, difficulty: string) {
     return `${topic.trim().toLowerCase()}::${difficulty}`;
 }
 
-// Computes priority distance; lower is better, and missing proficiency is lowest priority.
-function getPriorityDistance(joiningUser: QueueEntry, waitingUser: QueueEntry) {
-    if (
-        typeof joiningUser.proficiency !== 'number' ||
-        typeof waitingUser.proficiency !== 'number'
-    ) {
-        return Number.POSITIVE_INFINITY;
-    }
-
-    return Math.abs(joiningUser.proficiency - waitingUser.proficiency);
+// Returns how long a queued user has waited in milliseconds.
+function getWaitedMs(entry: QueueEntry, nowMs: number) {
+    return Math.max(0, nowMs - new Date(entry.joinedAt).getTime());
 }
 
-// Selects the best waiting candidate by closest proficiency, then FIFO on ties.
-export function pickBestWaitingUserIndex(queue: QueueEntry[], joiningUser: QueueEntry) {
+// Assigns candidate stage: 0 exact match, 1 topic-only after wait, 2 FIFO fallback after longer wait.
+function getMatchStage(joiningUser: QueueEntry, candidate: QueueEntry, nowMs: number) {
+    const sameTopic =
+        candidate.topic.trim().toLowerCase() === joiningUser.topic.trim().toLowerCase();
+    const sameDifficulty = candidate.difficulty === joiningUser.difficulty;
+
+    if (sameTopic && sameDifficulty) {
+        return 0;
+    }
+
+    const waitedMs = getWaitedMs(candidate, nowMs);
+    if (sameTopic && waitedMs >= TOPIC_EXPANSION_WAIT_MS) {
+        return 1;
+    }
+
+    if (waitedMs >= FIFO_EXPANSION_WAIT_MS) {
+        return 2;
+    }
+
+    return null;
+}
+
+// Selects best waiting user within one queue by stage priority then FIFO by joined time.
+export function pickBestWaitingUserIndex(
+    queue: QueueEntry[],
+    joiningUser: QueueEntry,
+    nowMs = Date.now(),
+) {
     if (queue.length === 0) return -1;
 
-    let bestIndex = 0;
-    let bestDistance = getPriorityDistance(joiningUser, queue[0]);
-    let bestJoinedAt = new Date(queue[0].joinedAt).getTime();
+    let bestIndex = -1;
+    let bestStage: number | null = null;
+    let bestJoinedAt = Number.POSITIVE_INFINITY;
 
-    for (let index = 1; index < queue.length; index += 1) {
+    for (let index = 0; index < queue.length; index += 1) {
         const candidate = queue[index];
-        const candidateDistance = getPriorityDistance(joiningUser, candidate);
-        const candidateJoinedAt = new Date(candidate.joinedAt).getTime();
+        const stage = getMatchStage(joiningUser, candidate, nowMs);
+        if (stage === null) continue;
 
-        if (candidateDistance < bestDistance) {
+        const joinedAtMs = new Date(candidate.joinedAt).getTime();
+        if (
+            bestStage === null ||
+            stage < bestStage ||
+            (stage === bestStage && joinedAtMs < bestJoinedAt)
+        ) {
             bestIndex = index;
-            bestDistance = candidateDistance;
-            bestJoinedAt = candidateJoinedAt;
-            continue;
-        }
-
-        if (candidateDistance === bestDistance && candidateJoinedAt < bestJoinedAt) {
-            bestIndex = index;
-            bestJoinedAt = candidateJoinedAt;
+            bestStage = stage;
+            bestJoinedAt = joinedAtMs;
         }
     }
 
@@ -68,7 +90,53 @@ function findQueuedUser(userId: string) {
     return null;
 }
 
-// Attempts to match immediately from the same criteria bucket; otherwise enqueues the user.
+// Finds and removes the best eligible waiting user across all queues.
+function findBestWaitingCandidate(joiningUser: QueueEntry) {
+    const nowMs = Date.now();
+
+    let selectedCriteriaKey: string | null = null;
+    let selectedIndex = -1;
+    let selectedStage: number | null = null;
+    let selectedJoinedAt = Number.POSITIVE_INFINITY;
+
+    for (const [criteriaKey, queue] of queueByCriteria.entries()) {
+        for (let index = 0; index < queue.length; index += 1) {
+            const candidate = queue[index];
+            const stage = getMatchStage(joiningUser, candidate, nowMs);
+            if (stage === null) continue;
+
+            const joinedAtMs = new Date(candidate.joinedAt).getTime();
+            if (
+                selectedStage === null ||
+                stage < selectedStage ||
+                (stage === selectedStage && joinedAtMs < selectedJoinedAt)
+            ) {
+                selectedCriteriaKey = criteriaKey;
+                selectedIndex = index;
+                selectedStage = stage;
+                selectedJoinedAt = joinedAtMs;
+            }
+        }
+    }
+
+    if (selectedCriteriaKey === null || selectedIndex < 0) {
+        return undefined;
+    }
+
+    const queue = queueByCriteria.get(selectedCriteriaKey);
+    if (!queue) return undefined;
+
+    const [selected] = queue.splice(selectedIndex, 1);
+    if (queue.length === 0) {
+        queueByCriteria.delete(selectedCriteriaKey);
+    } else {
+        queueByCriteria.set(selectedCriteriaKey, queue);
+    }
+
+    return selected;
+}
+
+// Attempts to match immediately from staged policy; otherwise enqueues the user.
 export function joinQueue(request: MatchRequest) {
     const criteriaKey = createCriteriaKey(request.topic, request.difficulty);
     const existingQueue = queueByCriteria.get(criteriaKey) ?? [];
@@ -78,8 +146,7 @@ export function joinQueue(request: MatchRequest) {
         joinedAt: new Date().toISOString(),
     };
 
-    const waitingUserIndex = pickBestWaitingUserIndex(existingQueue, entry);
-    const waitingUser = waitingUserIndex >= 0 ? existingQueue.splice(waitingUserIndex, 1)[0] : undefined;
+    const waitingUser = findBestWaitingCandidate(entry);
     if (waitingUser) {
         const match: MatchResult = {
             matchId: randomUUID(),
@@ -91,12 +158,6 @@ export function joinQueue(request: MatchRequest) {
 
         matchByUserId.set(waitingUser.userId, match);
         matchByUserId.set(entry.userId, match);
-
-        if (existingQueue.length > 0) {
-            queueByCriteria.set(criteriaKey, existingQueue);
-        } else {
-            queueByCriteria.delete(criteriaKey);
-        }
 
         return { state: 'matched' as const, match };
     }
