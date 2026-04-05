@@ -3,7 +3,7 @@ export const config = {
         return process.env.NODE_ENV ?? 'development';
     },
     get port() {
-        return Number(process.env.PORT) || 3002;
+        return Number(process.env.PORT) || 3003;
     },
     jwt: {
         get secret() {
