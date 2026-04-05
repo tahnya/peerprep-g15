@@ -4,8 +4,8 @@ import type { MatchRequest, MatchResult, QueueEntry, QueueStatus } from '../mode
 const queueByCriteria = new Map<string, QueueEntry[]>();
 const matchByUserId = new Map<string, MatchResult>();
 
-// Matching policy: t = 0 exact match, t = 15s topic-only expansion, 
-// t = 30s FIFO fallback expansion, t = 60s give up and timeout. 
+// Matching policy: t = 0 exact match, t = 15s topic-only expansion,
+// t = 30s FIFO fallback expansion, t = 60s give up and timeout.
 // Within each stage, longest-waiting eligible user is selected for fairness.
 const TOPIC_EXPANSION_WAIT_MS = 15_000;
 const FIFO_EXPANSION_WAIT_MS = 30_000;
@@ -113,7 +113,6 @@ function findQueuedUser(userId: string) {
 
 // Finds and removes the best eligible waiting user across all queues.
 function findBestWaitingCandidate(joiningUser: QueueEntry, nowMs: number) {
-
     let selectedCriteriaKey: string | null = null;
     let selectedIndex = -1;
     let selectedStage: number | null = null;

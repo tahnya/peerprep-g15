@@ -1,16 +1,21 @@
 import type { NextFunction, Request, Response } from 'express';
-import type { Role } from '../utils/user';
+import type { Role, ResolvedUser } from '../utils/user';
 import { AppError } from '../utils/app-error';
-import { verifyAccessToken } from '../utils/jwt';
+import { config } from '../config/env';
 
 export interface AuthenticatedRequest extends Request {
     auth: {
         userId: string;
         role: Role;
+        user: ResolvedUser;
     };
 }
 
-export function requireAuth(req: Request, _res: Response, next: NextFunction) {
+type ResolveAuthResponse = {
+    user: ResolvedUser;
+};
+
+export async function requireAuth(req: Request, _res: Response, next: NextFunction) {
     try {
         const header = req.headers.authorization ?? '';
         const [scheme, token] = header.split(' ');
@@ -19,20 +24,52 @@ export function requireAuth(req: Request, _res: Response, next: NextFunction) {
             return next(AppError.unauthorized('Missing or invalid Authorization header'));
         }
 
-        const decoded = verifyAccessToken(token);
-
-        const userId = decoded.sub;
-        const role = decoded.role;
-
-        if (!userId) {
-            return next(AppError.unauthorized('Invalid token payload'));
+        if (!config.userService.internalServiceToken) {
+            return next(AppError.unauthorized('Internal service token is not configured'));
         }
 
-        (req as AuthenticatedRequest).auth = { userId, role };
+        const response = await fetch(`${config.userService.baseUrl}/internal/auth/resolve`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Internal-Service-Token': config.userService.internalServiceToken,
+            },
+            body: JSON.stringify({
+                accessToken: token,
+            }),
+        });
+
+        let data: unknown = null;
+
+        try {
+            data = await response.json();
+        } catch {
+            data = null;
+        }
+
+        if (!response.ok || !data || typeof data !== 'object' || !('user' in data)) {
+            const message =
+                data &&
+                typeof data === 'object' &&
+                'message' in data &&
+                typeof data.message === 'string'
+                    ? data.message
+                    : 'Invalid or expired token';
+
+            return next(AppError.unauthorized(message));
+        }
+
+        const { user } = data as ResolveAuthResponse;
+
+        (req as AuthenticatedRequest).auth = {
+            userId: user.id,
+            role: user.role,
+            user,
+        };
+
         return next();
-    } catch (err) {
-        console.error('JWT verify error:', err);
-        return next(AppError.unauthorized('Invalid or expired token'));
+    } catch {
+        return next(AppError.unauthorized('Unable to resolve authentication with user service'));
     }
 }
 

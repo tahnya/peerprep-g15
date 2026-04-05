@@ -1,4 +1,4 @@
-import mongoose from "mongoose";
+import mongoose from 'mongoose';
 
 export async function connectDB(uri: string, dbName: string) {
     if (!uri) throw new Error('MONGO_URI is missing');

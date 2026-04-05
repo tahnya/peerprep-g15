@@ -149,19 +149,29 @@ test('POST /matching/join queues first user and matches second user with same cr
     const tokenA = createToken('user-a');
     const tokenB = createToken('user-b');
 
-    const firstJoin = await request('POST', '/matching/join', {
-        userId: 'user-a',
-        topic: 'arrays',
-        difficulty: 'easy',
-    }, tokenA);
+    const firstJoin = await request(
+        'POST',
+        '/matching/join',
+        {
+            userId: 'user-a',
+            topic: 'arrays',
+            difficulty: 'easy',
+        },
+        tokenA,
+    );
 
     assert.equal(firstJoin.status, 202);
 
-    const secondJoin = await request('POST', '/matching/join', {
-        userId: 'user-b',
-        topic: 'arrays',
-        difficulty: 'easy',
-    }, tokenB);
+    const secondJoin = await request(
+        'POST',
+        '/matching/join',
+        {
+            userId: 'user-b',
+            topic: 'arrays',
+            difficulty: 'easy',
+        },
+        tokenB,
+    );
 
     assert.equal(secondJoin.status, 200);
     const secondJson = secondJoin.json as { message: string; match: { userIds: string[] } };
@@ -171,11 +181,16 @@ test('POST /matching/join queues first user and matches second user with same cr
 
 test('POST /matching/join rejects invalid difficulty', async () => {
     const token = createToken('user-a');
-    const result = await request('POST', '/matching/join', {
-        userId: 'user-a',
-        topic: 'graphs',
-        difficulty: 'expert',
-    }, token);
+    const result = await request(
+        'POST',
+        '/matching/join',
+        {
+            userId: 'user-a',
+            topic: 'graphs',
+            difficulty: 'expert',
+        },
+        token,
+    );
 
     assert.equal(result.status, 400);
     assert.deepEqual(result.json, {
@@ -186,16 +201,26 @@ test('POST /matching/join rejects invalid difficulty', async () => {
 test('POST /matching/leave removes queued user', async () => {
     const token = createToken('user-c');
 
-    const queued = await request('POST', '/matching/join', {
-        userId: 'user-c',
-        topic: 'dp',
-        difficulty: 'hard',
-    }, token);
+    const queued = await request(
+        'POST',
+        '/matching/join',
+        {
+            userId: 'user-c',
+            topic: 'dp',
+            difficulty: 'hard',
+        },
+        token,
+    );
     assert.equal(queued.status, 202);
 
-    const left = await request('POST', '/matching/leave', {
-        userId: 'user-c',
-    }, token);
+    const left = await request(
+        'POST',
+        '/matching/leave',
+        {
+            userId: 'user-c',
+        },
+        token,
+    );
     assert.equal(left.status, 200);
 
     const status = await request('GET', '/matching/status/user-c', undefined, token);
@@ -209,11 +234,16 @@ test('POST /matching/leave removes queued user', async () => {
 test('GET /matching/status/:userId reports queued state', async () => {
     const token = createToken('user-d');
 
-    await request('POST', '/matching/join', {
-        userId: 'user-d',
-        topic: 'trees',
-        difficulty: 'medium',
-    }, token);
+    await request(
+        'POST',
+        '/matching/join',
+        {
+            userId: 'user-d',
+            topic: 'trees',
+            difficulty: 'medium',
+        },
+        token,
+    );
 
     const status = await request('GET', '/matching/status/user-d', undefined, token);
     assert.equal(status.status, 200);
@@ -241,11 +271,16 @@ test('matching endpoints reject missing auth token', async () => {
 
 test('matching endpoints reject userId that does not match authenticated token', async () => {
     const token = createToken('user-token');
-    const result = await request('POST', '/matching/join', {
-        userId: 'user-body',
-        topic: 'arrays',
-        difficulty: 'easy',
-    }, token);
+    const result = await request(
+        'POST',
+        '/matching/join',
+        {
+            userId: 'user-body',
+            topic: 'arrays',
+            difficulty: 'easy',
+        },
+        token,
+    );
 
     assert.equal(result.status, 403);
 });
@@ -350,16 +385,26 @@ test('edge case: duplicate join from the same user is not idempotent', async () 
     // Why this matters: repeated clicks/retries can unexpectedly create a self-match response.
     const token = createToken('user-dup');
 
-    const firstJoin = await request('POST', '/matching/join', {
-        userId: 'user-dup',
-        topic: 'graphs',
-        difficulty: 'easy',
-    }, token);
-    const secondJoin = await request('POST', '/matching/join', {
-        userId: 'user-dup',
-        topic: 'graphs',
-        difficulty: 'easy',
-    }, token);
+    const firstJoin = await request(
+        'POST',
+        '/matching/join',
+        {
+            userId: 'user-dup',
+            topic: 'graphs',
+            difficulty: 'easy',
+        },
+        token,
+    );
+    const secondJoin = await request(
+        'POST',
+        '/matching/join',
+        {
+            userId: 'user-dup',
+            topic: 'graphs',
+            difficulty: 'easy',
+        },
+        token,
+    );
 
     assert.equal(firstJoin.status, 202);
     assert.equal(secondJoin.status, 200);
@@ -372,16 +417,26 @@ test('edge case: repeated join can self-match the same user id', async () => {
     // Why this matters: a user can be matched with themselves, which is logically invalid.
     const token = createToken('user-self');
 
-    const firstJoin = await request('POST', '/matching/join', {
-        userId: 'user-self',
-        topic: 'arrays',
-        difficulty: 'medium',
-    }, token);
-    const secondJoin = await request('POST', '/matching/join', {
-        userId: 'user-self',
-        topic: 'arrays',
-        difficulty: 'medium',
-    }, token);
+    const firstJoin = await request(
+        'POST',
+        '/matching/join',
+        {
+            userId: 'user-self',
+            topic: 'arrays',
+            difficulty: 'medium',
+        },
+        token,
+    );
+    const secondJoin = await request(
+        'POST',
+        '/matching/join',
+        {
+            userId: 'user-self',
+            topic: 'arrays',
+            difficulty: 'medium',
+        },
+        token,
+    );
 
     assert.equal(firstJoin.status, 202);
     assert.equal(secondJoin.status, 200);
@@ -395,23 +450,38 @@ test('edge case: matched state cannot be cleared through leave endpoint', async 
     const tokenA = createToken('user-stale-a');
     const tokenB = createToken('user-stale-b');
 
-    const firstJoin = await request('POST', '/matching/join', {
-        userId: 'user-stale-a',
-        topic: 'dp',
-        difficulty: 'hard',
-    }, tokenA);
+    const firstJoin = await request(
+        'POST',
+        '/matching/join',
+        {
+            userId: 'user-stale-a',
+            topic: 'dp',
+            difficulty: 'hard',
+        },
+        tokenA,
+    );
     assert.equal(firstJoin.status, 202);
 
-    const secondJoin = await request('POST', '/matching/join', {
-        userId: 'user-stale-b',
-        topic: 'dp',
-        difficulty: 'hard',
-    }, tokenB);
+    const secondJoin = await request(
+        'POST',
+        '/matching/join',
+        {
+            userId: 'user-stale-b',
+            topic: 'dp',
+            difficulty: 'hard',
+        },
+        tokenB,
+    );
     assert.equal(secondJoin.status, 200);
 
-    const left = await request('POST', '/matching/leave', {
-        userId: 'user-stale-a',
-    }, tokenA);
+    const left = await request(
+        'POST',
+        '/matching/leave',
+        {
+            userId: 'user-stale-a',
+        },
+        tokenA,
+    );
     assert.equal(left.status, 404);
 
     const status = getQueueStatus('user-stale-a');
@@ -467,16 +537,26 @@ test('edge case: in-memory queue state is lost after reset (restart simulation)'
     // Why this matters: process restarts clear queue state because data is held in memory only.
     const token = createToken('user-restart');
 
-    const queued = await request('POST', '/matching/join', {
-        userId: 'user-restart',
-        topic: 'strings',
-        difficulty: 'easy',
-    }, token);
+    const queued = await request(
+        'POST',
+        '/matching/join',
+        {
+            userId: 'user-restart',
+            topic: 'strings',
+            difficulty: 'easy',
+        },
+        token,
+    );
     assert.equal(queued.status, 202);
 
     resetMatchingState();
 
-    const statusAfterReset = await request('GET', '/matching/status/user-restart', undefined, token);
+    const statusAfterReset = await request(
+        'GET',
+        '/matching/status/user-restart',
+        undefined,
+        token,
+    );
     assert.equal(statusAfterReset.status, 200);
     assert.deepEqual(statusAfterReset.json, {
         userId: 'user-restart',
