@@ -30,6 +30,7 @@ const accessTokens = new Map<string, ResolvedUser>();
 process.env.INTERNAL_SERVICE_TOKEN = internalServiceToken;
 process.env.USER_SERVICE_URL = 'http://localhost:3001';
 
+// Creates a deterministic access token and registers its resolved user payload.
 function createToken(userId: string, role: 'user' | 'admin' = 'user') {
     const token = `access-${userId}`;
     accessTokens.set(token, {
@@ -43,6 +44,7 @@ function createToken(userId: string, role: 'user' | 'admin' = 'user') {
     return token;
 }
 
+// Simulates the user-service internal token resolution endpoint used by auth middleware.
 async function mockAuthResolveFetch(input: URL, init?: RequestInit) {
     if (!input.toString().endsWith('/internal/auth/resolve')) {
         return new Response('Not found', { status: 404 });
@@ -73,6 +75,7 @@ async function mockAuthResolveFetch(input: URL, init?: RequestInit) {
     });
 }
 
+// Shared HTTP helper for API tests with optional JSON body and Bearer token auth.
 async function request(
     method: 'GET' | 'POST',
     path: string,
@@ -99,6 +102,7 @@ async function request(
 }
 
 test.before(async () => {
+    // Route auth-service lookups to our in-memory mock and boot the app on a random port.
     setAuthServiceFetch(mockAuthResolveFetch);
 
     const app = createApp();
@@ -113,6 +117,7 @@ test.before(async () => {
 });
 
 test.after(async () => {
+    // Ensure the HTTP server is closed and auth mock is reset after all tests.
     await new Promise<void>((resolve, reject) => {
         server.close((err) => {
             if (err) reject(err);
@@ -124,10 +129,12 @@ test.after(async () => {
 });
 
 test.beforeEach(() => {
+    // Keep tests isolated by clearing queue/match state and token fixtures per test.
     resetMatchingState();
     accessTokens.clear();
 });
 
+// API-level endpoint behavior tests.
 test('GET /matching/health returns service health', async () => {
     const result = await request('GET', '/matching/health');
 
@@ -243,6 +250,7 @@ test('matching endpoints reject userId that does not match authenticated token',
     assert.equal(result.status, 403);
 });
 
+// Pure matching-priority function tests.
 test('queue priority always prefers exact topic+difficulty match first', () => {
     const waitingQueue: QueueEntry[] = [
         {
@@ -337,6 +345,7 @@ test('queue priority falls back to FIFO after second wait window', () => {
     assert.equal(selectedIndex, 0);
 });
 
+// Edge-case and regression tests for known matching-service pitfalls.
 test('edge case: duplicate join from the same user is not idempotent', async () => {
     // Why this matters: repeated clicks/retries can unexpectedly create a self-match response.
     const token = createToken('user-dup');
