@@ -42,7 +42,9 @@ describe('POST /collab/create', () => {
     });
 
     it('should return 400 if fields are missing', async () => {
-        const res = await request(app).post('/collab/create').send({ userIds: ['user1'] }); // missing questionId
+        const res = await request(app)
+            .post('/collab/create')
+            .send({ userIds: ['user1'] }); // missing questionId
 
         expect(res.status).toBe(400);
         expect(res.body.message).toBe('Missing required fields');
