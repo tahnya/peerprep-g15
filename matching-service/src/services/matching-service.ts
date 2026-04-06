@@ -5,7 +5,8 @@ import {
     matchDocumentToResult,
     queueDocumentToEntry,
 } from '../models/matching-persistence-model';
-import type { MatchRequest, MatchResult, QueueEntry, QueueStatus } from '../models/matching-model';
+import type { Difficulty, MatchRequest, MatchResult, QueueEntry, QueueStatus } from '../models/matching-model';
+import { fetchRandomQuestionForMatch } from './question-service';
 
 export interface MatchingRepository {
     clear(): Promise<void>;
@@ -22,6 +23,11 @@ export interface MatchingRepository {
 const TOPIC_EXPANSION_WAIT_MS = 15_000;
 const FIFO_EXPANSION_WAIT_MS = 30_000;
 const QUEUE_TIMEOUT_MS = 60_000;
+const DIFFICULTY_RANK: Record<Difficulty, number> = {
+    easy: 0,
+    medium: 1,
+    hard: 2,
+};
 
 class MongoMatchingRepository implements MatchingRepository {
     async clear() {
@@ -182,6 +188,28 @@ function createCriteriaKey(topic: string, difficulty: string) {
     return `${topic.trim().toLowerCase()}::${difficulty}`;
 }
 
+function pickMatchTopic(waitingUserTopic: string, joiningUserTopic: string) {
+    const normalizedWaitingTopic = waitingUserTopic.trim().toLowerCase();
+    const normalizedJoiningTopic = joiningUserTopic.trim().toLowerCase();
+
+    if (normalizedWaitingTopic === normalizedJoiningTopic) {
+        return joiningUserTopic.trim();
+    }
+
+    return Math.random() < 0.5 ? waitingUserTopic.trim() : joiningUserTopic.trim();
+}
+
+function pickLowerDifficulty(first: Difficulty, second: Difficulty): Difficulty {
+    return DIFFICULTY_RANK[first] <= DIFFICULTY_RANK[second] ? first : second;
+}
+
+function resolveMatchCriteria(waitingUser: QueueEntry, joiningUser: QueueEntry) {
+    return {
+        topic: pickMatchTopic(waitingUser.topic, joiningUser.topic),
+        difficulty: pickLowerDifficulty(waitingUser.difficulty, joiningUser.difficulty),
+    };
+}
+
 // Returns how long a queued user has waited in milliseconds.
 function getWaitedMs(entry: QueueEntry, nowMs: number) {
     return Math.max(0, nowMs - new Date(entry.joinedAt).getTime());
@@ -285,7 +313,7 @@ function findBestWaitingCandidate(queue: QueueEntry[], joiningUser: QueueEntry, 
 }
 
 // Attempts to match immediately from staged policy; otherwise enqueues the user.
-export async function joinQueue(request: MatchRequest, nowMs = Date.now()) {
+export async function joinQueue(request: MatchRequest, nowMs = Date.now(), accessToken?: string) {
     await repository.purgeTimedOut(nowMs);
 
     const existingMatch = await repository.getMatchByUserId(request.userId);
@@ -307,11 +335,24 @@ export async function joinQueue(request: MatchRequest, nowMs = Date.now()) {
     const queuedUsers = await repository.listQueuedUsers(nowMs);
     const waitingUser = findBestWaitingCandidate(queuedUsers, entry, nowMs);
     if (waitingUser) {
+        const criteria = resolveMatchCriteria(waitingUser, entry);
+        const question = await fetchRandomQuestionForMatch(
+            criteria.topic,
+            criteria.difficulty,
+            accessToken,
+        );
+
+        if (!question) {
+            await repository.enqueue(entry);
+            return { state: 'queued' as const, entry };
+        }
+
         const match: MatchResult = {
             matchId: randomUUID(),
             userIds: [waitingUser.userId, entry.userId],
-            topic: entry.topic,
-            difficulty: entry.difficulty,
+            topic: criteria.topic,
+            difficulty: criteria.difficulty,
+            question,
             createdAt: new Date(nowMs).toISOString(),
         };
 

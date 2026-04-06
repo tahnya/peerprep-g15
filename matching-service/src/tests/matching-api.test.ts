@@ -14,7 +14,8 @@ import {
     setMatchingRepository,
 } from '../services/matching-service';
 import { setAuthServiceFetch } from '../services/auth-service.js';
-import type { QueueEntry } from '../models/matching-model';
+import { setQuestionServiceFetch } from '../services/question-service';
+import type { MatchResult, QueueEntry } from '../models/matching-model';
 
 let server: Server;
 let baseUrl: string;
@@ -29,9 +30,48 @@ type ResolvedUser = {
 };
 
 const accessTokens = new Map<string, ResolvedUser>();
+const questions = [
+    {
+        questionId: 1,
+        title: 'Array Pair Sum',
+        difficulty: 'Easy',
+        categories: ['arrays'],
+    },
+    {
+        questionId: 2,
+        title: 'Graph Traversal Basics',
+        difficulty: 'Easy',
+        categories: ['graphs'],
+    },
+    {
+        questionId: 3,
+        title: 'DP Warmup',
+        difficulty: 'Medium',
+        categories: ['dp'],
+    },
+    {
+        questionId: 4,
+        title: 'DP Starter',
+        difficulty: 'Easy',
+        categories: ['dp'],
+    },
+    {
+        questionId: 5,
+        title: 'Array Window Challenge',
+        difficulty: 'Medium',
+        categories: ['arrays'],
+    },
+    {
+        questionId: 6,
+        title: 'DP State Compression',
+        difficulty: 'Hard',
+        categories: ['dp'],
+    },
+];
 
 process.env.INTERNAL_SERVICE_TOKEN = internalServiceToken;
 process.env.USER_SERVICE_URL = 'http://localhost:3001';
+process.env.QUESTION_SERVICE_URL = 'http://localhost:3002';
 
 // Creates a deterministic access token and registers its resolved user payload.
 function createToken(userId: string, role: 'user' | 'admin' = 'user') {
@@ -78,6 +118,31 @@ async function mockAuthResolveFetch(input: URL, init?: RequestInit) {
     });
 }
 
+async function mockQuestionFetch(input: URL, init?: RequestInit) {
+    const url = new URL(input.toString());
+    if (url.pathname !== '/questions') {
+        return new Response('Not found', { status: 404 });
+    }
+
+    const authorization = new Headers(init?.headers).get('Authorization');
+    if (!authorization?.startsWith('Bearer access-')) {
+        return new Response(JSON.stringify({ message: 'Missing or invalid token' }), {
+            status: 401,
+            headers: { 'Content-Type': 'application/json' },
+        });
+    }
+
+    const difficulty = url.searchParams.get('difficulty');
+    const filteredQuestions = difficulty
+        ? questions.filter((question) => question.difficulty === difficulty)
+        : questions;
+
+    return new Response(JSON.stringify(filteredQuestions), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+    });
+}
+
 // Shared HTTP helper for API tests with optional JSON body and Bearer token auth.
 async function request(
     method: 'GET' | 'POST',
@@ -107,6 +172,7 @@ async function request(
 test.before(async () => {
     // Route auth-service lookups to our in-memory mock and boot the app on a random port.
     setAuthServiceFetch(mockAuthResolveFetch);
+    setQuestionServiceFetch(mockQuestionFetch);
     setMatchingRepository(createInMemoryMatchingRepository());
 
     const app = createApp();
@@ -130,6 +196,7 @@ test.after(async () => {
     });
 
     setAuthServiceFetch();
+    setQuestionServiceFetch();
     setMatchingRepository();
 });
 
@@ -179,9 +246,109 @@ test('POST /matching/join queues first user and matches second user with same cr
     );
 
     assert.equal(secondJoin.status, 200);
-    const secondJson = secondJoin.json as { message: string; match: { userIds: string[] } };
+    const secondJson = secondJoin.json as {
+        message: string;
+        match: { userIds: string[]; topic: string; difficulty: string; question?: { questionId: number } };
+    };
     assert.equal(secondJson.message, 'Matched successfully');
     assert.deepEqual(secondJson.match.userIds, ['user-a', 'user-b']);
+    assert.equal(secondJson.match.topic, 'arrays');
+    assert.equal(secondJson.match.difficulty, 'easy');
+    assert.equal(secondJson.match.question?.questionId, 1);
+});
+
+test('match with different topics chooses one topic randomly and lower difficulty', async () => {
+    const baseTimeMs = new Date('2026-04-04T12:00:00.000Z').getTime();
+
+    await joinQueue(
+        {
+            userId: 'user-topic-a',
+            topic: 'arrays',
+            difficulty: 'hard',
+        },
+        baseTimeMs,
+        'access-user-topic-a',
+    );
+
+    const secondJoin = await joinQueue(
+        {
+            userId: 'user-topic-b',
+            topic: 'graphs',
+            difficulty: 'easy',
+        },
+        baseTimeMs + 30_000,
+        'access-user-topic-b',
+    );
+
+    assert.equal(secondJoin.state, 'matched');
+    const match = secondJoin.match as MatchResult;
+    assert.ok(match.topic === 'arrays' || match.topic === 'graphs');
+    assert.equal(match.difficulty, 'easy');
+    assert.ok(match.question);
+    assert.equal(match.question?.difficulty, 'Easy');
+    assert.ok(match.question?.categories.includes(match.topic));
+});
+
+test('match with same topic but different difficulty picks lower difficulty', async () => {
+    const baseTimeMs = new Date('2026-04-04T13:00:00.000Z').getTime();
+
+    await joinQueue(
+        {
+            userId: 'user-diff-a',
+            topic: 'dp',
+            difficulty: 'hard',
+        },
+        baseTimeMs,
+        'access-user-diff-a',
+    );
+
+    const secondJoin = await joinQueue(
+        {
+            userId: 'user-diff-b',
+            topic: 'dp',
+            difficulty: 'medium',
+        },
+        baseTimeMs + 15_000,
+        'access-user-diff-b',
+    );
+
+    assert.equal(secondJoin.state, 'matched');
+    const match = secondJoin.match as MatchResult;
+    assert.equal(match.topic, 'dp');
+    assert.equal(match.difficulty, 'medium');
+    assert.equal(match.question?.difficulty, 'Medium');
+    assert.ok(match.question?.categories.includes('dp'));
+});
+
+test('when no question matches resolved topic and lower difficulty, users remain queued', async () => {
+    const baseTimeMs = new Date('2026-04-04T14:00:00.000Z').getTime();
+
+    await joinQueue(
+        {
+            userId: 'user-noq-a',
+            topic: 'linked-list',
+            difficulty: 'hard',
+        },
+        baseTimeMs,
+        'access-user-noq-a',
+    );
+
+    const secondJoin = await joinQueue(
+        {
+            userId: 'user-noq-b',
+            topic: 'linked-list',
+            difficulty: 'easy',
+        },
+        baseTimeMs + 15_000,
+        'access-user-noq-b',
+    );
+
+    assert.equal(secondJoin.state, 'queued');
+
+    const queue = await listQueuedUsers(baseTimeMs + 15_000);
+    const queuedIds = queue.map((entry) => entry.userId);
+    assert.ok(queuedIds.includes('user-noq-a'));
+    assert.ok(queuedIds.includes('user-noq-b'));
 });
 
 test('POST /matching/join rejects invalid difficulty', async () => {

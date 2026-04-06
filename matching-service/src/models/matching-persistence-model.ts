@@ -1,5 +1,5 @@
 import mongoose, { Schema } from 'mongoose';
-import type { Difficulty, MatchResult } from './matching-model';
+import type { Difficulty, MatchResult, MatchedQuestion } from './matching-model';
 
 export interface QueueDocument {
     userId: string;
@@ -14,6 +14,7 @@ export interface MatchDocument {
     userIds: [string, string];
     topic: string;
     difficulty: Difficulty;
+    question?: MatchedQuestion;
     createdAt: Date;
     endedAt?: Date;
 }
@@ -35,6 +36,12 @@ const matchSchema = new Schema<MatchDocument>(
         userIds: { type: [String], required: true, index: true },
         topic: { type: String, required: true, trim: true },
         difficulty: { type: String, required: true, enum: ['easy', 'medium', 'hard'] },
+        question: {
+            questionId: { type: Number },
+            title: { type: String },
+            difficulty: { type: String },
+            categories: { type: [String] },
+        },
         createdAt: { type: Date, required: true },
         endedAt: { type: Date },
     },
@@ -60,6 +67,7 @@ export function matchDocumentToResult(document: MatchDocument): MatchResult {
         userIds: document.userIds,
         topic: document.topic,
         difficulty: document.difficulty,
+        question: document.question,
         createdAt: document.createdAt.toISOString(),
         endedAt: document.endedAt?.toISOString(),
     };

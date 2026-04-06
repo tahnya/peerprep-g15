@@ -12,6 +12,19 @@ function getRequiredString(value: unknown) {
     return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
 }
 
+function getBearerToken(header: string | undefined) {
+    if (!header) {
+        return undefined;
+    }
+
+    const [scheme, token] = header.split(' ');
+    if (scheme !== 'Bearer' || !token) {
+        return undefined;
+    }
+
+    return token;
+}
+
 export class MatchingController {
     static health(_req: Request, res: Response) {
         res.status(200).json({ status: 'ok', service: 'matching-service' });
@@ -20,6 +33,7 @@ export class MatchingController {
     static async join(req: Request, res: Response, next: NextFunction) {
         try {
             const auth = (req as AuthenticatedRequest).auth;
+            const accessToken = getBearerToken(req.headers.authorization);
             const userId = getRequiredString(req.body?.userId);
             const topic = getRequiredString(req.body?.topic);
             const difficulty = getRequiredString(req.body?.difficulty);
@@ -48,7 +62,7 @@ export class MatchingController {
                 difficulty: difficulty as 'easy' | 'medium' | 'hard',
                 proficiency:
                     typeof req.body?.proficiency === 'number' ? req.body.proficiency : undefined,
-            });
+            }, undefined, accessToken);
 
             if (result.state === 'matched') {
                 return res.status(200).json({
