@@ -3,13 +3,13 @@ import { createSession, getSession, endSession } from '../services/collaboration
 
 export async function createSessionHandler(req: Request, res: Response) {
     try {
-        const { roomId, userIds, questionId } = req.body;
+        const { userIds, questionId } = req.body;
 
-        if (!roomId || !userIds || !questionId) {
+        if (!userIds || !questionId) {
             return res.status(400).json({ message: 'Missing required fields' });
         }
 
-        const session = await createSession(roomId, userIds, questionId);
+        const session = await createSession(userIds, questionId);
         return res.status(201).json(session);
     } catch (err) {
         return res.status(500).json({ message: 'Internal server error' });

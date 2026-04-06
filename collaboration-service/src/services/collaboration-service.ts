@@ -1,5 +1,6 @@
 import { Session } from '../models/collaboration-model';
 import { LANGUAGE_MAP } from '../config/constants';
+import { v4 as uuidv4 } from 'uuid';
 // @ts-ignore
 import axios from 'axios';
 
@@ -14,8 +15,24 @@ interface Judge0Response {
 }
 
 // create a new session when two users are matched
-export async function createSession(roomId: string, userIds: string[], questionId: string) {
-    const session = new Session({ roomId, userIds, questionId });
+export async function createSession(userIds: string[], questionId: string) {
+    const existingActiveSession = await Session.findOne({
+        userIds: { $all: userIds },
+        questionId: questionId,
+        status: { $ne: 'ended' },
+    });
+
+    if (existingActiveSession) {
+        return existingActiveSession;
+    }
+
+    const roomId = uuidv4();
+    const session = new Session({
+        roomId,
+        userIds,
+        questionId,
+        status: 'pending', // start as pending until language is locked in
+    });
     return await session.save();
 }
 
