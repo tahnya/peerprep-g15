@@ -39,7 +39,7 @@ const Collab = () => {
     } = location.state || {};
 
     const [socket, setSocket] = useState<Socket | null>(null);
-    const [session, setSession] = useState<SessionState | null>(null);
+    const [_session,setSession] = useState<SessionState | null>(null);
     const [code, setCode] = useState('');
     const [messages, setMessages] = useState<Message[]>([]);
     const [chatInput, setChatInput] = useState('');
