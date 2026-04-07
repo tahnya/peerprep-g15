@@ -38,8 +38,13 @@ const Login = () => {
 
             const name: string = response.data.user.displayName;
             localStorage.setItem('name', name); // Store user name in localStorage
+
+            const userId: string = response.data.user.id;
+            localStorage.setItem('userId', userId); // Store user ID in localStorage
+
             setName('Login successful: ' + name);
             console.log('Login successful: ', name);
+            console.log('User ID:', userId);
             setError('');
 
             //check to navigate to admin or user home page based on role

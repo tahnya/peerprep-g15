@@ -91,7 +91,6 @@ const Admin = () => {
         { title: 'Total Questions', value: totalQuestions },
         { title: 'Total Users', value: totalUsers },
         { title: 'Categories', value: totalCategories },
-        { title: 'Easy Questions', value: easyCount },
     ];
 
     return (

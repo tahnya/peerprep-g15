@@ -13,6 +13,7 @@ const NavBar = ({ name }: { name: string }) => {
         } finally {
             localStorage.removeItem('accessToken');
             localStorage.removeItem('name');
+            localStorage.removeItem('userId');
             navigate('/');
         }
     };

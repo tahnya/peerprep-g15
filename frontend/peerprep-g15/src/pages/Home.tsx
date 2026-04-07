@@ -2,7 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import '../App.css';
 
 import questionAxios from '../questionAxios.ts';
+import matchAxios from '../matchAxios.ts';
+import collabAxios from '../collabAxios.ts';
 import NavBar from '../components/NavBar';
+import { useNavigate } from 'react-router';
 
 type Question = {
     questionId: number;
@@ -22,6 +25,8 @@ const Home = () => {
     const [isMatching, setIsMatching] = useState(false);
     // const [matchedUser, setMatchedUser] = useState<string | null>(null);
     const [matchingMessage, setMatchingMessage] = useState<string | null>(null);
+    const [queuedUserId, setQueuedUserId] = useState<string | null>(null);
+    const navigate = useNavigate();
 
     useEffect(() => {
         const fetchQuestions = async () => {
@@ -50,6 +55,50 @@ const Home = () => {
         fetchQuestions();
     }, []);
 
+    useEffect(() => {
+        if (!isMatching || !queuedUserId) return;
+
+        const interval = setInterval(async () => {
+            try {
+                const response = await matchAxios.get(`/matching/status/${queuedUserId}`);
+                console.log('Status response:', response.data);
+
+                const data = response.data;
+
+                if (data.state === 'queued') {
+                    setMatchingMessage('Still waiting for another user to join...');
+                    return;
+                }
+
+                if (data.state === 'matched') {
+                    await handleMatched(data);
+                    return;
+                }
+
+                if (data.state === 'timed_out') {
+                    setMatchingMessage('Matching timed out. Please try again.');
+                    setIsMatching(false);
+                    setQueuedUserId(null);
+                    return;
+                }
+
+                if (data.state === 'not_found') {
+                    setMatchingMessage('Queue entry not found or cancelled.');
+                    setIsMatching(false);
+                    setQueuedUserId(null);
+                    return;
+                }
+            } catch (err: any) {
+                console.error('Status polling error:', err);
+                setMatchingMessage(err.response?.data?.message || 'Failed to check match status.');
+                setIsMatching(false);
+                setQueuedUserId(null);
+            }
+        }, 3000);
+
+        return () => clearInterval(interval);
+    }, [isMatching, queuedUserId]);
+
     const uniqueCategories = useMemo(() => {
         return Array.from(
             new Set(
@@ -67,31 +116,112 @@ const Home = () => {
     }, [allQuestions, difficulty, category]);
 
     const handleFindMatch = async () => {
+        const userId = localStorage.getItem('userId');
+
+        if (!userId) {
+            setMatchingMessage('No user ID found. Please log in again.');
+            return;
+        }
+
+        if (!category || !difficulty) {
+            setMatchingMessage('Please choose both a category and difficulty first.');
+            return;
+        }
+
         try {
             setIsMatching(true);
-            setMatchingMessage('Finding another user with the same category or difficulty...');
+            setQueuedUserId(null);
+            setMatchingMessage(
+                `Looking for a user with category "${category}" and difficulty "${difficulty}"...`,
+            );
 
-            // Example API call
-            const response = await questionAxios.post('/matching/join', {
-                userId: localStorage.getItem('userId'),
+            const payload = {
+                userId,
                 topic: category,
-                difficulty,
-            });
+                difficulty: difficulty.toLowerCase(),
+            };
 
-            if (response.data.state === 'matched') {
-                setMatchingMessage('Match found!');
-                setIsMatching(false);
+            const response = await matchAxios.post('/matching/join', payload);
+            console.log('Matching response:', response.data);
+
+            if (response.data.match) {
+                await handleMatched(response.data.match);
                 return;
             }
 
-            if (response.data.state === 'queued') {
+            if (response.data.entry || response.data.message === 'Queued successfully') {
                 setMatchingMessage('Waiting for another user to join...');
+                setQueuedUserId(userId);
+                return;
             }
-        } catch (err) {
+
+            setMatchingMessage('Matching request sent.');
+        } catch (err: any) {
             console.error('Matching error:', err);
-            setMatchingMessage('Failed to start matching.');
+            setMatchingMessage(err.response?.data?.message || 'Failed to start matching.');
             setIsMatching(false);
+            setQueuedUserId(null);
         }
+    };
+
+    const handleCancelMatch = async () => {
+        const userId = queuedUserId || localStorage.getItem('userId');
+
+        if (!userId) {
+            setMatchingMessage('No queued user found.');
+            setIsMatching(false);
+            setQueuedUserId(null);
+            return;
+        }
+
+        try {
+            await matchAxios.post('/matching/leave', { userId });
+            setMatchingMessage('Matching cancelled.');
+        } catch (err: any) {
+            console.error('Cancel matching error:', err);
+            setMatchingMessage(err.response?.data?.message || 'Failed to cancel matching.');
+        } finally {
+            setIsMatching(false);
+            setQueuedUserId(null);
+        }
+    };
+
+    const getSession = async (userIds: string[], questionId: string) => {
+        try {
+            const response = await collabAxios.post('/collab/create', {
+                userIds,
+                questionId,
+            });
+
+            console.log('Session response:', response.data);
+
+            const { roomId } = response.data;
+
+            navigate(`/collab/${roomId}`);
+        } catch (err: any) {
+            console.log('failed sess: ', err);
+            setMatchingMessage(err.response?.data?.message || 'Failed to create collab session.');
+        }
+    };
+
+    const handleMatched = async (matchData: any) => {
+        const currentUserId = localStorage.getItem('userId');
+        if (!currentUserId) {
+            setMatchingMessage('No user ID found. Please log in again.');
+            return;
+        }
+
+        // adjust these based on your actual match response shape
+        const matchedUserId = matchData.matchedUserId;
+        const questionId = String(matchData.questionId);
+
+        const userIds = [currentUserId, matchedUserId];
+
+        setMatchingMessage('Match found! Creating session...');
+        setIsMatching(false);
+        setQueuedUserId(null);
+
+        await getSession(userIds, questionId);
     };
 
     return (
@@ -178,6 +308,16 @@ const Home = () => {
                             </strong>
                             <div>{matchingMessage}</div>
                         </div>
+
+                        {isMatching && (
+                            <button
+                                type="button"
+                                className="btn btn-outline-danger btn-sm ms-auto"
+                                onClick={handleCancelMatch}
+                            >
+                                Cancel
+                            </button>
+                        )}
                     </div>
                     <h3 className="mb-3">Matching Questions</h3>
 

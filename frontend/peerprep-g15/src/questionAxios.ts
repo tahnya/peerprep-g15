@@ -1,6 +1,5 @@
 import axios, { type AxiosInstance } from 'axios';
 import authAxios from './authAxios';
-import { useNavigate } from 'react-router';
 
 const questionAxios: AxiosInstance = axios.create({
     baseURL: 'http://localhost:3002',
@@ -39,8 +38,7 @@ questionAxios.interceptors.response.use(
             } catch (refreshError) {
                 localStorage.removeItem('accessToken');
                 localStorage.removeItem('name');
-                const navigate = useNavigate();
-                navigate('/');
+                window.location.href = '/';
                 return Promise.reject(refreshError);
             }
         }
