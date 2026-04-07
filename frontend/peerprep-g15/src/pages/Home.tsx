@@ -71,7 +71,7 @@ const Home = () => {
                 }
 
                 if (data.state === 'matched') {
-                    await handleMatched(data);
+                    await handleMatched(data.match);
                     return;
                 }
 
@@ -186,16 +186,17 @@ const Home = () => {
         }
     };
 
-    const getSession = async (userIds: string[], questionId: string) => {
+    const getSession = async (roomId: string, userIds: string[], questionId: string) => {
         try {
             const response = await collabAxios.post('/collab/create', {
+                roomId,
                 userIds,
                 questionId,
             });
 
             console.log('Session response:', response.data);
 
-            const { roomId } = response.data;
+            // const { roomId } = response.data;
 
             navigate(`/collab/${roomId}`);
         } catch (err: any) {
@@ -212,16 +213,20 @@ const Home = () => {
         }
 
         // adjust these based on your actual match response shape
-        const matchedUserId = matchData.matchedUserId;
-        const questionId = String(matchData.questionId);
+        const matchedUserId = matchData.userIds.find((id: string) => id !== currentUserId);
+        const questionId = String(matchData.question.questionId);
+        const roomId = String(matchData.matchId);
 
         const userIds = [currentUserId, matchedUserId];
+        console.log('Question ID:', questionId);
+        console.log('Room ID:', roomId);
+        console.log('User IDs:', userIds);
 
         setMatchingMessage('Match found! Creating session...');
         setIsMatching(false);
         setQueuedUserId(null);
 
-        await getSession(userIds, questionId);
+        await getSession(roomId, userIds, questionId);
     };
 
     return (
