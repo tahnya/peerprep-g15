@@ -61,7 +61,10 @@ class MongoMatchingRepository implements MatchingRepository {
     }
 
     async getMatchByUserId(userId: string) {
-        const document = await MatchModel.findOne({ userIds: userId, endedAt: { $exists: false } }).lean();
+        const document = await MatchModel.findOne({
+            userIds: userId,
+            endedAt: { $exists: false },
+        }).lean();
         return document ? matchDocumentToResult(document) : null;
     }
 
