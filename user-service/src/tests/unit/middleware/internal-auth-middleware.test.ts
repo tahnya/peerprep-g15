@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Request, Response, NextFunction } from 'express';
-import { requireInternalService } from '../../middleware/internal-auth-middleware';
+import { requireInternalService } from '../../../middleware/internal-auth-middleware';
 
-vi.mock('../../config/env', () => ({
+vi.mock('../../../config/env', () => ({
     config: {
         internal: {
             serviceToken: 'test-internal-secret',

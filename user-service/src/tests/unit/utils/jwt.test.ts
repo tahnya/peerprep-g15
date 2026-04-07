@@ -4,7 +4,7 @@ import {
     signRefreshToken,
     verifyAccessToken,
     verifyRefreshToken,
-} from '../../utils/jwt';
+} from '../../../utils/jwt';
 
 describe('jwt utils', () => {
     beforeEach(() => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveAuthSchema } from '../../validation/internal-validation';
+import { resolveAuthSchema } from '../../../validation/internal-validation';
 
 describe('resolveAuthSchema', () => {
     it('accepts a valid access token', () => {

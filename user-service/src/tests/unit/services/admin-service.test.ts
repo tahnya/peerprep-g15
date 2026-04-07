@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { AdminService } from '../../services/admin-service';
+import { AdminService } from '../../../services/admin-service';
 
-vi.mock('../../models/user-model', () => ({
+vi.mock('../../../models/user-model', () => ({
     UserModel: {
         findOne: vi.fn(),
         find: vi.fn(),
@@ -9,7 +9,7 @@ vi.mock('../../models/user-model', () => ({
     },
 }));
 
-import { UserModel } from '../../models/user-model';
+import { UserModel } from '../../../models/user-model';
 
 describe('AdminService.promote', () => {
     beforeEach(() => {

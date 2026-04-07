@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import type { Request, Response } from 'express';
 
-vi.mock('../../controllers/auth-controller', () => ({
+vi.mock('../../../controllers/auth-controller', () => ({
     AuthController: {
         register: vi.fn((_req: Request, res: Response) =>
             res.status(201).json({
@@ -39,8 +39,8 @@ vi.mock('../../controllers/auth-controller', () => ({
     },
 }));
 
-import { createApp } from '../../app';
-import { AuthController } from '../../controllers/auth-controller';
+import { createApp } from '../../../app';
+import { AuthController } from '../../../controllers/auth-controller';
 
 describe('auth routes', () => {
     beforeEach(() => {

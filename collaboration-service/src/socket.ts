@@ -7,6 +7,7 @@ import {
     endSession,
     handleDisconnect,
     executeCode,
+    submitCode,
     addMessageToSession,
 } from './services/collaboration-service';
 
@@ -155,19 +156,8 @@ export function initSocket(server: http.Server) {
 
                 try {
                     io.to(roomId).emit('code-executing');
-                    const result = await executeCode(roomId, code, language);
-
-                    // TODO: compare result.stdout with expected output from question service
-                    // For now, just send the result and let frontend decide
-
-                    const passed = result.status === 'Accepted' && !result.stderr;
-
-                    io.to(roomId).emit('submit-result', {
-                        stdout: result.stdout,
-                        stderr: result.stderr,
-                        status: result.status,
-                        passed: passed,
-                    });
+                    const result = await submitCode(roomId, code, language);
+                    io.to(roomId).emit('submit-result', result);
                 } catch (err) {
                     io.to(roomId).emit('code-error', { message: 'Execution failed' });
                 }

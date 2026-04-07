@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { updateMeSchema } from '../../validation/me-validation';
+import { updateMeSchema } from '../../../validation/me-validation';
 
 describe('updateMeSchema', () => {
     it('accepts a valid username update and lowercases it', () => {

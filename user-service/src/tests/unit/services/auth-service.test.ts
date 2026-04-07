@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import bcrypt from 'bcrypt';
-import { AuthService } from '../../services/auth-service';
+import { AuthService } from '../../../services/auth-service';
 
 vi.mock('bcrypt', () => ({
     default: {
@@ -9,7 +9,7 @@ vi.mock('bcrypt', () => ({
     },
 }));
 
-vi.mock('../../models/user-model', () => ({
+vi.mock('../../../models/user-model', () => ({
     UserModel: {
         findOne: vi.fn(),
         findById: vi.fn(),
@@ -17,19 +17,19 @@ vi.mock('../../models/user-model', () => ({
     },
 }));
 
-vi.mock('../../utils/jwt', () => ({
+vi.mock('../../../utils/jwt', () => ({
     signAccessToken: vi.fn(),
     signRefreshToken: vi.fn(),
     verifyRefreshToken: vi.fn(),
 }));
 
-vi.mock('../../utils/token', () => ({
+vi.mock('../../../utils/token', () => ({
     sha256: vi.fn(),
 }));
 
-import { UserModel } from '../../models/user-model';
-import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../../utils/jwt';
-import { sha256 } from '../../utils/token';
+import { UserModel } from '../../../models/user-model';
+import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../../../utils/jwt';
+import { sha256 } from '../../../utils/token';
 
 describe('AuthService.register', () => {
     beforeEach(() => {

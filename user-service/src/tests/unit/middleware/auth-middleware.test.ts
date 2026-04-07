@@ -4,20 +4,20 @@ import {
     requireAuth,
     requireRole,
     type AuthenticatedRequest,
-} from '../../middleware/auth-middleware';
+} from '../../../middleware/auth-middleware';
 
-vi.mock('../../utils/jwt', () => ({
+vi.mock('../../../utils/jwt', () => ({
     verifyAccessToken: vi.fn(),
 }));
 
-vi.mock('../../models/user-model', () => ({
+vi.mock('../../../models/user-model', () => ({
     UserModel: {
         findById: vi.fn(),
     },
 }));
 
-import { verifyAccessToken } from '../../utils/jwt';
-import { UserModel } from '../../models/user-model';
+import { verifyAccessToken } from '../../../utils/jwt';
+import { UserModel } from '../../../models/user-model';
 
 describe('requireAuth', () => {
     let req: Partial<Request>;

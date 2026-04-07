@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { loginSchema, registerSchema } from '../../validation/auth-validation';
+import { loginSchema, registerSchema } from '../../../validation/auth-validation';
 
 describe('registerSchema', () => {
     it('accepts a valid register payload', () => {

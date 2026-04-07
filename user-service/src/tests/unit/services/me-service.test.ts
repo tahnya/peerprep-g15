@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import bcrypt from 'bcrypt';
-import { MeService } from '../../services/me-service';
+import { MeService } from '../../../services/me-service';
 
 vi.mock('bcrypt', () => ({
     default: {
@@ -9,7 +9,7 @@ vi.mock('bcrypt', () => ({
     },
 }));
 
-vi.mock('../../models/user-model', () => ({
+vi.mock('../../../models/user-model', () => ({
     UserModel: {
         findById: vi.fn(),
         findOne: vi.fn(),
@@ -17,7 +17,7 @@ vi.mock('../../models/user-model', () => ({
     },
 }));
 
-import { UserModel } from '../../models/user-model';
+import { UserModel } from '../../../models/user-model';
 
 describe('MeService.getMe', () => {
     beforeEach(() => {

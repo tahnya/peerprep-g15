@@ -1,10 +1,10 @@
-import request from 'supertest';
-import { createApp } from '../../app';
-import { createSession, getSession, endSession } from '../../services/collaboration-service';
-
 // mock uuid and the service layer
 jest.mock('uuid', () => ({ v4: jest.fn(() => 'mocked-room-id') }));
 jest.mock('../../services/collaboration-service');
+
+import request from 'supertest';
+import { createApp } from '../../app';
+import { createSession, getSession, endSession } from '../../services/collaboration-service';
 
 const mockedCreateSession = jest.mocked(createSession);
 const mockedGetSession = jest.mocked(getSession);
@@ -35,14 +35,16 @@ describe('POST /collab/create', () => {
 
         const res = await request(app)
             .post('/collab/create')
-            .send({ userIds: ['user1', 'user2'], questionId: 'q1' });
+            .send({ roomId: 'room1', userIds: ['user1', 'user2'], questionId: 'q1' });
 
         expect(res.status).toBe(201);
         expect(res.body.roomId).toBe('room1');
     });
 
     it('should return 400 if fields are missing', async () => {
-        const res = await request(app).post('/collab/create').send({ userIds: ['user1'] }); // missing questionId
+        const res = await request(app)
+            .post('/collab/create')
+            .send({ roomId: 'room1', userIds: ['user1'] }); // missing questionId
 
         expect(res.status).toBe(400);
         expect(res.body.message).toBe('Missing required fields');
@@ -53,7 +55,7 @@ describe('POST /collab/create', () => {
 
         const res = await request(app)
             .post('/collab/create')
-            .send({ userIds: ['user1', 'user2'], questionId: 'q1' });
+            .send({ roomId: 'room1', userIds: ['user1', 'user2'], questionId: 'q1' });
 
         expect(res.status).toBe(500);
         expect(res.body.message).toBe('Internal server error');

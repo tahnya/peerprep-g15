@@ -1,8 +1,31 @@
 import { Session } from '../models/collaboration-model';
 import { LANGUAGE_MAP } from '../config/constants';
-import { v4 as uuidv4 } from 'uuid';
+import { config } from '../config/env';
 // @ts-ignore
 import axios from 'axios';
+
+interface QuestionExample {
+    input: string;
+    output: string;
+    explanation?: string;
+}
+
+interface Question {
+    questionId: number;
+    examples: QuestionExample[];
+    starterCode: Record<string, string>;
+    supportedLanguages: string[];
+}
+
+async function fetchQuestion(questionId: string): Promise<Question> {
+    const response = await axios.get(
+        `${config.questionService.baseUrl}/internal/questions/${questionId}`,
+        {
+            headers: { 'X-Internal-Service-Token': config.questionService.internalServiceToken },
+        },
+    );
+    return response.data;
+}
 
 interface Judge0Response {
     stdout: string;
@@ -15,24 +38,11 @@ interface Judge0Response {
 }
 
 // create a new session when two users are matched
-export async function createSession(userIds: string[], questionId: string) {
-    const existingActiveSession = await Session.findOne({
-        userIds: { $all: userIds },
-        questionId: questionId,
-        status: { $ne: 'ended' },
-    });
+export async function createSession(roomId: string, userIds: string[], questionId: string) {
+    const existing = await Session.findOne({ roomId });
+    if (existing) return existing;
 
-    if (existingActiveSession) {
-        return existingActiveSession;
-    }
-
-    const roomId = uuidv4();
-    const session = new Session({
-        roomId,
-        userIds,
-        questionId,
-        status: 'pending', // start as pending until language is locked in
-    });
+    const session = new Session({ roomId, userIds, questionId, status: 'pending' });
     return await session.save();
 }
 
@@ -106,6 +116,55 @@ export async function executeCode(roomId: string, code: string, language: string
         time: response.data.time,
         memory: response.data.memory,
     };
+}
+
+export async function submitCode(roomId: string, code: string, language: string) {
+    const session = await getSession(roomId);
+    if (!session) throw new Error('Session not found');
+    if (session.status !== 'active') throw new Error('Session is not active');
+
+    const languageId = LANGUAGE_MAP[language];
+    if (!languageId) throw new Error('Unsupported language');
+
+    if (!session.questionId) throw new Error('Session has no questionId');
+    const question = await fetchQuestion(session.questionId);
+    const testCases = question.examples ?? [];
+
+    if (testCases.length === 0) {
+        // No test cases defined — fall back to a plain run
+        const result = await executeCode(roomId, code, language);
+        const passed = result.status === 'Accepted' && !result.stderr;
+        return {
+            passed,
+            results: [],
+            stdout: result.stdout,
+            stderr: result.stderr,
+            status: result.status,
+        };
+    }
+
+    const results = await Promise.all(
+        testCases.map(async (tc) => {
+            const response: any = await axios.post(
+                'https://ce.judge0.com/submissions?wait=true',
+                { source_code: code, language_id: languageId, stdin: tc.input },
+                { headers: { 'Content-Type': 'application/json' } },
+            );
+            const actual = (response.data.stdout ?? '').trim();
+            const expected = tc.output.trim();
+            return {
+                input: tc.input,
+                expected,
+                actual,
+                passed: actual === expected && !response.data.stderr,
+                stderr: response.data.stderr,
+                status: response.data.status.description,
+            };
+        }),
+    );
+
+    const passed = results.every((r) => r.passed);
+    return { passed, results };
 }
 
 // end a session

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Request } from 'express';
-import { getAuth } from '../../utils/auth';
+import { getAuth } from '../../../utils/auth';
 
 describe('getAuth', () => {
     it('returns null when req.auth is missing', () => {

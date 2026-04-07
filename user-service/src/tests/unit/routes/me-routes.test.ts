@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import type { NextFunction, Request, Response } from 'express';
 
-vi.mock('../../middleware/auth-middleware', () => ({
+vi.mock('../../../middleware/auth-middleware', () => ({
     requireAuth: vi.fn((req: Request, _res: Response, next: NextFunction) => {
         (
             req as Request & {
@@ -14,7 +14,7 @@ vi.mock('../../middleware/auth-middleware', () => ({
     requireRole: vi.fn(() => (_req: Request, _res: Response, next: NextFunction) => next()),
 }));
 
-vi.mock('../../controllers/me-controller', () => ({
+vi.mock('../../../controllers/me-controller', () => ({
     MeController: {
         me: vi.fn((_req: Request, res: Response) =>
             res.status(200).json({
@@ -46,9 +46,9 @@ vi.mock('../../controllers/me-controller', () => ({
     },
 }));
 
-import { createApp } from '../../app';
-import { MeController } from '../../controllers/me-controller';
-import { requireAuth } from '../../middleware/auth-middleware';
+import { createApp } from '../../../app';
+import { MeController } from '../../../controllers/me-controller';
+import { requireAuth } from '../../../middleware/auth-middleware';
 
 describe('me routes', () => {
     beforeEach(() => {

@@ -1,3 +1,7 @@
+// mock uuid and the service layer
+jest.mock('uuid', () => ({ v4: jest.fn(() => 'mocked-room-id') }));
+jest.mock('../../services/collaboration-service');
+
 import { createServer } from 'http';
 import Client from 'socket.io-client';
 import { createApp } from '../../app';
@@ -11,10 +15,6 @@ import {
     executeCode,
     addMessageToSession,
 } from '../../services/collaboration-service';
-
-// mock uuid and the service layer
-jest.mock('uuid', () => ({ v4: jest.fn(() => 'mocked-room-id') }));
-jest.mock('../../services/collaboration-service');
 
 const mockedGetSession = jest.mocked(getSession);
 const mockedVoteLanguage = jest.mocked(voteLanguage);

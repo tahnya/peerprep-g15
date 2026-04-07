@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { roleChangeSchema, listUsersQuerySchema } from '../../validation/admin-validation';
+import { roleChangeSchema, listUsersQuerySchema } from '../../../validation/admin-validation';
 
 describe('roleChangeSchema', () => {
     it('accepts a valid username and lowercases it', () => {

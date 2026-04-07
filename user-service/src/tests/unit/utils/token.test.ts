@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sha256 } from '../../utils/token';
+import { sha256 } from '../../../utils/token';
 
 describe('sha256', () => {
     it('returns the expected SHA-256 hash', () => {

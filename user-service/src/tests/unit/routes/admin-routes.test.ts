@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import type { NextFunction, Request, Response } from 'express';
 
-vi.mock('../../middleware/auth-middleware', () => ({
+vi.mock('../../../middleware/auth-middleware', () => ({
     requireAuth: vi.fn((req: Request, _res: Response, next: NextFunction) => {
         (
             req as Request & {
@@ -16,7 +16,7 @@ vi.mock('../../middleware/auth-middleware', () => ({
     ),
 }));
 
-vi.mock('../../controllers/admin-controller', () => ({
+vi.mock('../../../controllers/admin-controller', () => ({
     AdminController: {
         home: vi.fn((_req: Request, res: Response) =>
             res.status(200).json({ message: 'Admin home' }),
@@ -47,9 +47,9 @@ vi.mock('../../controllers/admin-controller', () => ({
     },
 }));
 
-import { createApp } from '../../app';
-import { AdminController } from '../../controllers/admin-controller';
-import { requireAuth, requireRole } from '../../middleware/auth-middleware';
+import { createApp } from '../../../app';
+import { AdminController } from '../../../controllers/admin-controller';
+import { requireAuth, requireRole } from '../../../middleware/auth-middleware';
 
 describe('admin routes', () => {
     beforeEach(() => {

@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import type { NextFunction, Request, Response } from 'express';
-import { AppError } from '../../utils/app-error';
+import { AppError } from '../../../utils/app-error';
 
-vi.mock('../../middleware/internal-auth-middleware', () => ({
+vi.mock('../../../middleware/internal-auth-middleware', () => ({
     requireInternalService: vi.fn((req: Request, _res: Response, next: NextFunction) => {
         const token = req.header('X-Internal-Service-Token');
 
@@ -15,7 +15,7 @@ vi.mock('../../middleware/internal-auth-middleware', () => ({
     }),
 }));
 
-vi.mock('../../controllers/internal-auth-controller', () => ({
+vi.mock('../../../controllers/internal-auth-controller', () => ({
     InternalAuthController: {
         resolve: vi.fn((_req: Request, res: Response) =>
             res.status(200).json({
@@ -31,8 +31,8 @@ vi.mock('../../controllers/internal-auth-controller', () => ({
     },
 }));
 
-import { createApp } from '../../app';
-import { InternalAuthController } from '../../controllers/internal-auth-controller';
+import { createApp } from '../../../app';
+import { InternalAuthController } from '../../../controllers/internal-auth-controller';
 
 describe('internal routes', () => {
     beforeEach(() => {
