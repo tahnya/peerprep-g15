@@ -3,6 +3,7 @@ import { io, Socket } from 'socket.io-client';
 import { useParams } from 'react-router';
 import NavBar from '../components/NavBar';
 import questionAxios from '../questionAxios';
+import matchAxios from '../matchAxios';
 
 const COLLAB_URL = 'http://localhost:3004';
 
@@ -101,8 +102,14 @@ const Collab = () => {
             setSelectedLanguage(data.language);
         });
 
-        s.on('user-locked-in', () => {
+        s.on('user-locked-in', async () => {
             setPartnerLockedIn(true);
+            try {
+                await matchAxios.post('/matching/end', { matchId: roomId });
+                console.log('Match ended');
+            } catch (err) {
+                console.log(err);
+            }
         });
 
         s.on('language-mismatch', () => {
@@ -266,8 +273,15 @@ const Collab = () => {
         setChatInput('');
     };
 
-    const handleLeave = () => {
+    const handleLeave = async () => {
+        // try {
+        //     await matchAxios.post('/matching/end', { matchId: roomId });
+        //     console.log('Match ended');
+
         socket?.emit('leave-session', roomId, userId);
+        // } catch (err: any) {
+        //     console.error('Failed to end match:', err.response?.data || err.message);
+        // }
     };
 
     // Language selection overlay
@@ -372,7 +386,7 @@ const Collab = () => {
                         <div className="card-body">
                             <h3 className="text-danger">{title}</h3>
                             <p className="text-muted">{msg}</p>
-                            <a href="/" className="btn btn-primary">
+                            <a href="/home" className="btn btn-primary">
                                 Back to Home
                             </a>
                         </div>
