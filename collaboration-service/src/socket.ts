@@ -12,7 +12,6 @@ import {
     TestCase,
 } from './services/collaboration-service';
 
-
 const disconnectTimers = new Map<string, NodeJS.Timeout>();
 const languageTimers = new Map<string, NodeJS.Timeout>();
 const runCodeTimers = new Map<string, NodeJS.Timeout>();
@@ -37,7 +36,10 @@ export function initSocket(server: http.Server) {
             const socketsInRoom = await io.in(roomId).fetchSockets();
             for (const s of socketsInRoom) {
                 if (s.id !== socket.id && s.data.username) {
-                    socket.emit('partner-info', { userId: s.data.userId, username: s.data.username });
+                    socket.emit('partner-info', {
+                        userId: s.data.userId,
+                        username: s.data.username,
+                    });
                 }
             }
 
@@ -134,7 +136,13 @@ export function initSocket(server: http.Server) {
         // user runs code with non-hidden test cases
         socket.on(
             'run-code',
-            async (roomId: string, userId: string, code: string, language: string, testCases: TestCase[]) => {
+            async (
+                roomId: string,
+                userId: string,
+                code: string,
+                language: string,
+                testCases: TestCase[],
+            ) => {
                 const session = await getSession(roomId);
                 if (!session) return;
                 if (session.status !== 'active') return;
@@ -161,7 +169,13 @@ export function initSocket(server: http.Server) {
         // user submits code
         socket.on(
             'submit-code',
-            async (roomId: string, userId: string, code: string, language: string, testCases: TestCase[]) => {
+            async (
+                roomId: string,
+                userId: string,
+                code: string,
+                language: string,
+                testCases: TestCase[],
+            ) => {
                 const session = await getSession(roomId);
                 if (!session || session.status !== 'active') return;
                 if (!session.userIds.includes(userId)) return;

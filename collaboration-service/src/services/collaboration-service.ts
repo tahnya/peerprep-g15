@@ -104,7 +104,12 @@ export async function executeCode(roomId: string, code: string, language: string
     };
 }
 
-export async function submitCode(roomId: string, code: string, language: string, testCases: TestCase[]) {
+export async function submitCode(
+    roomId: string,
+    code: string,
+    language: string,
+    testCases: TestCase[],
+) {
     const session = await getSession(roomId);
     if (!session) throw new Error('Session not found');
     if (session.status !== 'active') throw new Error('Session is not active');

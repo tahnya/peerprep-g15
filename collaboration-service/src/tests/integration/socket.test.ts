@@ -16,7 +16,7 @@ import {
     handleDisconnect,
     executeCode,
     addMessageToSession,
-    submitCode
+    submitCode,
 } from '../../services/collaboration-service';
 
 const mockedGetSession = jest.mocked(getSession);
@@ -181,20 +181,38 @@ describe('code-change', () => {
 describe('run-code', () => {
     it('should emit code-result after execution', (done) => {
         mockedGetSession.mockResolvedValue(
-            mockSession({ status: 'active', userIds: ['user1', 'user2'], questionId: 'question1' }) as any,
+            mockSession({
+                status: 'active',
+                userIds: ['user1', 'user2'],
+                questionId: 'question1',
+            }) as any,
         );
 
         mockedSubmitCode.mockResolvedValue({
             passed: true,
             results: [
-                { input: '1 2', expected: '3', actual: '3', passed: true, stderr: null, status: 'Accepted' },
-                { input: '10 20', expected: '30', actual: '30', passed: true, stderr: null, status: 'Accepted' },
+                {
+                    input: '1 2',
+                    expected: '3',
+                    actual: '3',
+                    passed: true,
+                    stderr: null,
+                    status: 'Accepted',
+                },
+                {
+                    input: '10 20',
+                    expected: '30',
+                    actual: '30',
+                    passed: true,
+                    stderr: null,
+                    status: 'Accepted',
+                },
             ],
         } as any);
 
         const mockTestCases = [
             { input: '1 2', expectedOutput: '3' },
-            { input: '10 20', expectedOutput: '30' }
+            { input: '10 20', expectedOutput: '30' },
         ];
 
         clientA.emit('join-room', 'room1', 'user1');
@@ -229,7 +247,7 @@ describe('run-code', () => {
 
         const mockTestCases = [
             { input: '1 2', expectedOutput: '3' },
-            { input: '10 20', expectedOutput: '30' }
+            { input: '10 20', expectedOutput: '30' },
         ];
 
         clientA.emit('join-room', 'room1', 'user1');

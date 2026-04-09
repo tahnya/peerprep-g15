@@ -26,7 +26,7 @@ type TestCase = {
     isHidden: boolean;
     explanation: string;
     weight: number;
-}
+};
 
 type Message = {
     senderId: string;
@@ -270,7 +270,14 @@ const Collab = () => {
 
     const handleSubmit = () => {
         if (!socket) return;
-        socket.emit('submit-code', roomId, userId, code, selectedLanguage, question?.testCases ?? []);
+        socket.emit(
+            'submit-code',
+            roomId,
+            userId,
+            code,
+            selectedLanguage,
+            question?.testCases ?? [],
+        );
         setIsExecuting(true);
     };
 
@@ -319,7 +326,9 @@ const Collab = () => {
                                                 className="spinner-border text-primary mb-3"
                                                 role="status"
                                             />
-                                            <p className="text-muted">Waiting for partner to join...</p>
+                                            <p className="text-muted">
+                                                Waiting for partner to join...
+                                            </p>
                                         </>
                                     ) : (
                                         <>
@@ -347,7 +356,8 @@ const Collab = () => {
                                                         onClick={() => setSelectedLanguage(lang)}
                                                         disabled={lockedIn}
                                                     >
-                                                        {lang.charAt(0).toUpperCase() + lang.slice(1)}
+                                                        {lang.charAt(0).toUpperCase() +
+                                                            lang.slice(1)}
                                                     </button>
                                                 ))}
                                             </div>
@@ -374,7 +384,16 @@ const Collab = () => {
                                     )}
                                 </div>
                             </div>
-                            <div className="col-3 d-flex flex-column border-start position-fixed end-0 top-0 bg-white" style={{ height: 'calc(100vh - 56px)', marginTop: '56px', width: '25%', zIndex: 100, marginLeft: '8px'}}>
+                            <div
+                                className="col-3 d-flex flex-column border-start position-fixed end-0 top-0 bg-white"
+                                style={{
+                                    height: 'calc(100vh - 56px)',
+                                    marginTop: '56px',
+                                    width: '25%',
+                                    zIndex: 100,
+                                    marginLeft: '8px',
+                                }}
+                            >
                                 <div className="p-2 border-bottom bg-light">
                                     <strong>Chat</strong>
                                 </div>
@@ -387,7 +406,9 @@ const Collab = () => {
                                             key={i}
                                             className={`mb-2 ${msg.senderId === userId ? 'text-end' : ''}`}
                                         >
-                                            <small className="text-muted d-block">{msg.username}</small>
+                                            <small className="text-muted d-block">
+                                                {msg.username}
+                                            </small>
                                             <span
                                                 className={`d-inline-block px-2 py-1 rounded ${msg.senderId === userId ? 'bg-primary text-white' : 'bg-light border'}`}
                                             >
@@ -405,7 +426,9 @@ const Collab = () => {
                                             placeholder="Type a message..."
                                             value={chatInput}
                                             onChange={(e) => setChatInput(e.target.value)}
-                                            onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                                            onKeyDown={(e) =>
+                                                e.key === 'Enter' && handleSendMessage()
+                                            }
                                         />
                                         <button
                                             className="btn btn-sm btn-primary"
@@ -446,9 +469,7 @@ const Collab = () => {
                         <div className="card-body">
                             <h3 className="text-danger">{title}</h3>
                             <p className="text-muted">{msg}</p>
-                            <button 
-                            className="btn btn-primary"
-                            onClick={handleLeave}>
+                            <button className="btn btn-primary" onClick={handleLeave}>
                                 Back to Home
                             </button>
                         </div>
