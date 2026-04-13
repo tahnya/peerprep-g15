@@ -1,5 +1,7 @@
 import cors from 'cors';
 import express from 'express';
+import { registerRoutes } from './routes';
+import { errorHandler } from './middleware/error-handler';
 
 export function createApp() {
 	const app = express();
@@ -13,6 +15,10 @@ export function createApp() {
 			service: 'history-service',
 		});
 	});
+
+	registerRoutes(app);
+
+	app.use(errorHandler);
 
 	return app;
 }
