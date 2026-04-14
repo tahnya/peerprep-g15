@@ -90,7 +90,7 @@ services:
 
     frontend:
         build:
-            context: ./frontend/peerprep-g15
+            context: ./frontend/
         ports:
             - '5173:80'
         depends_on:

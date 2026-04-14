@@ -4,7 +4,7 @@ import '../App.css';
 import questionAxios from '../questionAxios.ts';
 import matchAxios from '../matchAxios.ts';
 import collabAxios from '../collabAxios.ts';
-import NavBar from '../components/NavBar';
+import NavBar from '../components/NavBar.tsx';
 import { useNavigate } from 'react-router';
 
 type Question = {
