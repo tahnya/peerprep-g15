@@ -24,7 +24,6 @@ export interface MatchingRepository {
     attemptMatchAtomically?(
         entry: QueueEntry,
         nowMs: number,
-        accessToken: string | undefined,
         joiningUserAlreadyQueued: boolean,
     ): Promise<MatchResult | null>;
 }
@@ -295,7 +294,6 @@ class RedisMatchingRepository implements MatchingRepository {
     async attemptMatchAtomically(
         entry: QueueEntry,
         nowMs: number,
-        accessToken: string | undefined,
         joiningUserAlreadyQueued: boolean,
     ): Promise<MatchResult | null> {
         await this.purgeTimedOut(nowMs);
@@ -320,7 +318,6 @@ class RedisMatchingRepository implements MatchingRepository {
         const question = await fetchRandomQuestionForMatch(
             criteria.topic,
             criteria.difficulty,
-            accessToken,
         );
 
         if (!question) {
@@ -710,14 +707,12 @@ async function ensureMatchHasQuestion(match: MatchResult) {
 async function attemptMatchForEntry(
     entry: QueueEntry,
     nowMs: number,
-    accessToken: string | undefined,
     joiningUserAlreadyQueued: boolean,
 ) {
     if (repository.attemptMatchAtomically) {
         return repository.attemptMatchAtomically(
             entry,
             nowMs,
-            accessToken,
             joiningUserAlreadyQueued,
         );
     }
@@ -794,7 +789,6 @@ export async function joinQueue(request: MatchRequest, nowMs = Date.now(), acces
                 const rematched = await attemptMatchForEntry(
                     refreshedEntry,
                     nowMs,
-                    accessToken,
                     true,
                 );
 
@@ -814,7 +808,7 @@ export async function joinQueue(request: MatchRequest, nowMs = Date.now(), acces
         lastHeartbeatAt: new Date(nowMs).toISOString(),
     };
 
-    const match = await attemptMatchForEntry(entry, nowMs, accessToken, false);
+    const match = await attemptMatchForEntry(entry, nowMs, false);
     if (match) {
         return { state: 'matched' as const, match };
     }
@@ -890,7 +884,7 @@ export async function getQueueStatus(
             };
         }
 
-        const rematched = await attemptMatchForEntry(entry, nowMs, accessToken, true);
+        const rematched = await attemptMatchForEntry(entry, nowMs, true);
         if (rematched) {
             return {
                 userId,
