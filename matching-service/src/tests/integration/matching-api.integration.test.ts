@@ -160,6 +160,16 @@ async function request(
     };
 }
 
+async function withMockedNow<T>(nowMs: number, operation: () => Promise<T>) {
+    const originalNow = Date.now;
+    Date.now = () => nowMs;
+    try {
+        return await operation();
+    } finally {
+        Date.now = originalNow;
+    }
+}
+
 test.before(async () => {
     setAuthServiceFetch(mockAuthResolveFetch);
     setQuestionServiceFetch(mockQuestionFetch);
@@ -370,6 +380,52 @@ test('GET /matching/status/:userId reports queued state', async () => {
     assert.equal(statusJson.state, 'queued');
     assert.equal(statusJson.entry?.topic, 'trees');
     assert.equal(statusJson.entry?.difficulty, 'medium');
+});
+
+test('same-topic gap-2 difficulty only expands at 30s via API', async () => {
+    const tokenHard = createToken('user-gap-hard');
+    const tokenEasy = createToken('user-gap-easy');
+    const baseTimeMs = new Date('2026-04-06T10:00:00.000Z').getTime();
+
+    const firstJoin = await withMockedNow(baseTimeMs, async () =>
+        request(
+            'POST',
+            '/matching/join',
+            {
+                userId: 'user-gap-hard',
+                topic: 'dp',
+                difficulty: 'hard',
+            },
+            tokenHard,
+        ),
+    );
+    assert.equal(firstJoin.status, 202);
+
+    const secondJoin = await withMockedNow(baseTimeMs + 15_000, async () =>
+        request(
+            'POST',
+            '/matching/join',
+            {
+                userId: 'user-gap-easy',
+                topic: 'dp',
+                difficulty: 'easy',
+            },
+            tokenEasy,
+        ),
+    );
+    assert.equal(secondJoin.status, 202);
+
+    const statusBeforeWideExpansion = await withMockedNow(baseTimeMs + 29_999, async () =>
+        request('GET', '/matching/status/user-gap-easy', undefined, tokenEasy),
+    );
+    assert.equal(statusBeforeWideExpansion.status, 200);
+    assert.equal((statusBeforeWideExpansion.json as { state: string }).state, 'queued');
+
+    const statusAtWideExpansion = await withMockedNow(baseTimeMs + 30_000, async () =>
+        request('GET', '/matching/status/user-gap-easy', undefined, tokenEasy),
+    );
+    assert.equal(statusAtWideExpansion.status, 200);
+    assert.equal((statusAtWideExpansion.json as { state: string }).state, 'matched');
 });
 
 test('matching endpoints reject missing auth token', async () => {

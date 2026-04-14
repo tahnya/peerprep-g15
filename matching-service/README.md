@@ -265,10 +265,9 @@ The internal helper functions below support the queue policy and are useful when
 - `createCriteriaKey(topic, difficulty)` groups users into the same queue bucket.
 - `getWaitedMs(entry, nowMs)` calculates how long a user has been waiting.
 - `isTimedOut(entry, nowMs)` checks whether a user has exceeded the queue timeout.
-- `purgeTimedOutEntries(nowMs)` removes timed-out users before matching or listing the queue.
-- `getMatchStage(joiningUser, candidate, nowMs)` applies the matching policy: exact match, topic expansion, then FIFO fallback.
-- `findQueuedUser(userId)` removes a specific queued user.
-- `findBestWaitingCandidate(joiningUser, nowMs)` searches all queues for the best eligible match.
+- `getDifficultyGap(first, second)` computes the absolute difficulty distance.
+- `getMatchStage(joiningUser, candidate, nowMs)` applies the staged same-topic policy.
+- `findBestWaitingCandidate(joiningUser, nowMs)` searches all queued users for the best eligible match.
 
 ### Middleware
 
@@ -280,7 +279,8 @@ The internal helper functions below support the queue policy and are useful when
 The queue uses staged matching:
 
 - Stage 0: exact topic and difficulty match.
-- Stage 1: topic match after the waiting user has been in queue for at least 15 seconds.
+- Stage 1: same-topic adjacent difficulty match after the waiting user has been in queue for at least 15 seconds.
+- Stage 2: same-topic any difficulty match after the waiting user has been in queue for at least 30 seconds.
 - Timeout: users are removed from consideration after 60 seconds.
 
 If multiple candidates qualify, the service prefers the lowest stage first and then the longest-waiting user.

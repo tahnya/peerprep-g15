@@ -209,6 +209,46 @@ test('queued same-topic different-difficulty users can match on status poll afte
     assert.ok(match.userIds.includes('user-status-rematch-b'));
 });
 
+test('same-topic users with difficulty gap of two only match after 30s expansion', async () => {
+    const baseTimeMs = new Date('2026-04-04T13:45:00.000Z').getTime();
+
+    const firstJoin = await joinQueue(
+        {
+            userId: 'user-gap-two-a',
+            topic: 'dp',
+            difficulty: 'hard',
+        },
+        baseTimeMs,
+        'access-user-gap-two-a',
+    );
+    assert.equal(firstJoin.state, 'queued');
+
+    const secondJoin = await joinQueue(
+        {
+            userId: 'user-gap-two-b',
+            topic: 'dp',
+            difficulty: 'easy',
+        },
+        baseTimeMs + 15_000,
+        'access-user-gap-two-b',
+    );
+    assert.equal(secondJoin.state, 'queued');
+
+    const statusBeforeWideExpansion = await getQueueStatus(
+        'user-gap-two-b',
+        baseTimeMs + 29_999,
+        'access-user-gap-two-b',
+    );
+    assert.equal(statusBeforeWideExpansion.state, 'queued');
+
+    const statusAtWideExpansion = await getQueueStatus(
+        'user-gap-two-b',
+        baseTimeMs + 30_000,
+        'access-user-gap-two-b',
+    );
+    assert.equal(statusAtWideExpansion.state, 'matched');
+});
+
 test('when no question matches resolved topic and lower difficulty, users remain queued', async () => {
     const baseTimeMs = new Date('2026-04-04T14:00:00.000Z').getTime();
 
@@ -272,7 +312,7 @@ test('queue priority always prefers exact topic+difficulty match first', () => {
     assert.equal(selectedIndex, 0);
 });
 
-test('queue priority expands to topic-only after first wait window', () => {
+test('queue priority expands to adjacent difficulty after first wait window', () => {
     const waitingQueue: QueueEntry[] = [
         {
             userId: 'user-f1',
@@ -363,6 +403,35 @@ test('edge case: same-topic boundary activates at 15s and remains topic-locked a
         new Date('2026-04-04T10:00:15.000Z').getTime(),
     );
     assert.equal(topicExpansionBoundaryIndex, 0);
+
+    const wideGapWaitingQueue: QueueEntry[] = [
+        {
+            userId: 'user-wide-gap',
+            topic: 'trees',
+            difficulty: 'easy',
+            joinedAt: '2026-04-04T10:00:00.000Z',
+        },
+    ];
+    const wideGapJoiningUser: QueueEntry = {
+        userId: 'user-wide-gap-join',
+        topic: 'trees',
+        difficulty: 'hard',
+        joinedAt: '2026-04-04T10:02:00.000Z',
+    };
+
+    const beforeWideExpansionIndex = pickBestWaitingUserIndex(
+        wideGapWaitingQueue,
+        wideGapJoiningUser,
+        new Date('2026-04-04T10:00:29.000Z').getTime(),
+    );
+    assert.equal(beforeWideExpansionIndex, -1);
+
+    const wideExpansionBoundaryIndex = pickBestWaitingUserIndex(
+        wideGapWaitingQueue,
+        wideGapJoiningUser,
+        new Date('2026-04-04T10:00:30.000Z').getTime(),
+    );
+    assert.equal(wideExpansionBoundaryIndex, 0);
 
     const crossTopicJoiningUser: QueueEntry = {
         userId: 'user-join-cross-topic',

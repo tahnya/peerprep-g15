@@ -43,6 +43,7 @@ export interface MatchingRepository {
 }
 
 const TOPIC_EXPANSION_WAIT_MS = 15_000;
+const WIDE_DIFFICULTY_EXPANSION_WAIT_MS = 30_000;
 const QUEUE_TIMEOUT_MS = 60_000;
 const DIFFICULTY_RANK: Record<Difficulty, number> = {
     easy: 0,
@@ -358,7 +359,8 @@ export function createInMemoryMatchingRepository() {
 }
 
 // Matching policy: t = 0 exact match,
-// t = 15s expand to any difficulty within same topic, t = 60s timeout.
+// t = 15s expand to adjacent difficulty within same topic,
+// t = 30s expand to any difficulty within same topic, t = 60s timeout.
 // Within each stage, longest-waiting eligible user is selected for fairness.
 export function setMatchingRepository(nextRepository?: MatchingRepository) {
     repository = nextRepository ?? new MongoMatchingRepository();
@@ -401,20 +403,29 @@ function isTimedOut(entry: QueueEntry, nowMs: number) {
     return getWaitedMs(entry, nowMs) >= QUEUE_TIMEOUT_MS;
 }
 
+function getDifficultyGap(first: Difficulty, second: Difficulty) {
+    return Math.abs(DIFFICULTY_RANK[first] - DIFFICULTY_RANK[second]);
+}
+
 // Removes timed-out users from all queues so they are never considered for matching.
-// Assigns candidate stage: 0 exact match, 1 same-topic after wait.
+// Assigns candidate stage: 0 exact match, 1 adjacent same-topic after wait,
+// 2 any same-topic after longer wait.
 function getMatchStage(joiningUser: QueueEntry, candidate: QueueEntry, nowMs: number) {
     const sameTopic =
         candidate.topic.trim().toLowerCase() === joiningUser.topic.trim().toLowerCase();
-    const sameDifficulty = candidate.difficulty === joiningUser.difficulty;
+    const difficultyGap = getDifficultyGap(candidate.difficulty, joiningUser.difficulty);
 
-    if (sameTopic && sameDifficulty) {
+    if (sameTopic && difficultyGap === 0) {
         return 0;
     }
 
     const waitedMs = getWaitedMs(candidate, nowMs);
-    if (sameTopic && waitedMs >= TOPIC_EXPANSION_WAIT_MS) {
+    if (sameTopic && difficultyGap === 1 && waitedMs >= TOPIC_EXPANSION_WAIT_MS) {
         return 1;
+    }
+
+    if (sameTopic && waitedMs >= WIDE_DIFFICULTY_EXPANSION_WAIT_MS) {
+        return 2;
     }
 
     return null;
