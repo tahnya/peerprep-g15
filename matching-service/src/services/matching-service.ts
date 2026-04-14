@@ -45,6 +45,7 @@ export interface MatchingRepository {
 
 const TOPIC_EXPANSION_WAIT_MS = 15_000;
 const WIDE_DIFFICULTY_EXPANSION_WAIT_MS = 30_000;
+const HEARTBEAT_FRESHNESS_MS = 20_000;
 const QUEUE_TIMEOUT_MS = 60_000;
 const DIFFICULTY_RANK: Record<Difficulty, number> = {
     easy: 0,
@@ -475,6 +476,10 @@ function getLastActivityAtMs(entry: QueueEntry) {
     return new Date(entry.lastHeartbeatAt ?? entry.joinedAt).getTime();
 }
 
+function isEligibleForMatching(entry: QueueEntry, nowMs: number) {
+    return Math.max(0, nowMs - getLastActivityAtMs(entry)) <= HEARTBEAT_FRESHNESS_MS;
+}
+
 // Determines if a queued user has exceeded the maximum wait time and should be timed out.
 function isTimedOut(entry: QueueEntry, nowMs: number) {
     return Math.max(0, nowMs - getLastActivityAtMs(entry)) >= QUEUE_TIMEOUT_MS;
@@ -488,6 +493,10 @@ function getDifficultyGap(first: Difficulty, second: Difficulty) {
 // Assigns candidate stage: 0 exact match, 1 adjacent same-topic after wait,
 // 2 any same-topic after longer wait.
 function getMatchStage(joiningUser: QueueEntry, candidate: QueueEntry, nowMs: number) {
+    if (!isEligibleForMatching(candidate, nowMs)) {
+        return null;
+    }
+
     const sameTopic =
         candidate.topic.trim().toLowerCase() === joiningUser.topic.trim().toLowerCase();
     const difficultyGap = getDifficultyGap(candidate.difficulty, joiningUser.difficulty);

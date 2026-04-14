@@ -326,7 +326,7 @@ The queue uses staged matching:
 
 - The service treats stale queued entries as ghosts when no heartbeat is received within the timeout window.
 - Heartbeats update queue liveness without changing staged matching fairness (which still uses joined time).
-- If clients stop sending heartbeat due to crash, disconnect, or network loss, entries self-expire via TTL cleanup.
+- If clients stop sending heartbeat due to crash, disconnect, or network loss, entries stop being eligible for matching once the heartbeat freshness window elapses, and they are later removed by TTL cleanup.
 
 If multiple candidates qualify, the service prefers the lowest stage first and then the longest-waiting user.
 

@@ -242,6 +242,8 @@ test('same-topic users with difficulty gap of two only match after 30s expansion
     );
     assert.equal(statusBeforeWideExpansion.state, 'queued');
 
+    await refreshQueueHeartbeat('user-gap-two-a', baseTimeMs + 29_000);
+
     const statusAtWideExpansion = await getQueueStatus(
         'user-gap-two-b',
         baseTimeMs + 30_000,
@@ -289,12 +291,14 @@ test('queue priority always prefers exact topic+difficulty match first', () => {
             difficulty: 'hard',
             proficiency: 2,
             joinedAt: '2026-04-04T10:00:00.000Z',
+            lastHeartbeatAt: '2026-04-04T10:02:00.000Z',
         },
         {
             userId: 'user-p2',
             topic: 'graphs',
             difficulty: 'easy',
             joinedAt: '2026-04-04T10:01:00.000Z',
+            lastHeartbeatAt: '2026-04-04T10:02:00.000Z',
         },
     ];
 
@@ -320,12 +324,14 @@ test('queue priority expands to adjacent difficulty after first wait window', ()
             topic: 'dp',
             difficulty: 'easy',
             joinedAt: '2026-04-04T10:00:00.000Z',
+            lastHeartbeatAt: '2026-04-04T10:00:16.000Z',
         },
         {
             userId: 'user-f2',
             topic: 'arrays',
             difficulty: 'medium',
             joinedAt: '2026-04-04T10:01:00.000Z',
+            lastHeartbeatAt: '2026-04-04T10:00:16.000Z',
         },
     ];
 
@@ -351,12 +357,14 @@ test('queue priority does not expand to different topics after second wait windo
             topic: 'strings',
             difficulty: 'easy',
             joinedAt: '2026-04-04T10:00:00.000Z',
+            lastHeartbeatAt: '2026-04-04T10:00:31.000Z',
         },
         {
             userId: 'user-global-2',
             topic: 'graphs',
             difficulty: 'hard',
             joinedAt: '2026-04-04T10:00:05.000Z',
+            lastHeartbeatAt: '2026-04-04T10:00:31.000Z',
         },
     ];
 
@@ -382,12 +390,14 @@ test('edge case: same-topic boundary activates at 15s and remains topic-locked a
             topic: 'trees',
             difficulty: 'easy',
             joinedAt: '2026-04-04T10:00:00.000Z',
+            lastHeartbeatAt: '2026-04-04T10:00:15.000Z',
         },
         {
             userId: 'user-other-topic',
             topic: 'arrays',
             difficulty: 'hard',
             joinedAt: '2026-04-04T10:00:01.000Z',
+            lastHeartbeatAt: '2026-04-04T10:00:15.000Z',
         },
     ];
 
@@ -411,6 +421,7 @@ test('edge case: same-topic boundary activates at 15s and remains topic-locked a
             topic: 'trees',
             difficulty: 'easy',
             joinedAt: '2026-04-04T10:00:00.000Z',
+            lastHeartbeatAt: '2026-04-04T10:00:30.000Z',
         },
     ];
     const wideGapJoiningUser: QueueEntry = {
@@ -655,6 +666,38 @@ test('queued user times out after 1 minute and is removed from queue', async () 
 
     const statusAfterRemoval = await getQueueStatus('user-timeout', joinedAtMs + 60_001);
     assert.equal(statusAfterRemoval.state, 'not_found');
+});
+
+test('stale user is not eligible for matching before queue timeout removes them', async () => {
+    const joinedAtMs = new Date('2026-04-04T11:30:00.000Z').getTime();
+
+    const firstJoin = await joinQueue(
+        {
+            userId: 'user-stale-ineligible',
+            topic: 'graphs',
+            difficulty: 'medium',
+        },
+        joinedAtMs,
+        'access-user-stale-ineligible',
+    );
+    assert.equal(firstJoin.state, 'queued');
+
+    const secondJoin = await joinQueue(
+        {
+            userId: 'user-fresh-joiner',
+            topic: 'graphs',
+            difficulty: 'medium',
+        },
+        joinedAtMs + 21_000,
+        'access-user-fresh-joiner',
+    );
+
+    assert.equal(secondJoin.state, 'queued');
+
+    const queue = await listQueuedUsers(joinedAtMs + 21_000);
+    assert.equal(queue.length, 2);
+    assert.ok(queue.some((entry) => entry.userId === 'user-stale-ineligible'));
+    assert.ok(queue.some((entry) => entry.userId === 'user-fresh-joiner'));
 });
 
 test('expired queued users are never matched with new joiners', async () => {
