@@ -139,17 +139,18 @@ describe('voteLanguage', () => {
     });
 
     it('should start session if both users vote same language', async () => {
-        const MOCK_QUESTION : Question = {
-            questionId: "mock-id-123",
-            title: "Two Sum",
-            description: "Given an array of integers, return indices of the two numbers such that they add up to a specific target.",
-            difficulty: "Easy",
-            supportedLanguages: ["javascript", "python", "java"],
+        const MOCK_QUESTION: Question = {
+            questionId: 'mock-id-123',
+            title: 'Two Sum',
+            description:
+                'Given an array of integers, return indices of the two numbers such that they add up to a specific target.',
+            difficulty: 'Easy',
+            supportedLanguages: ['javascript', 'python', 'java'],
             starterCode: {
-                javascript: "var twoSum = function(nums, target) {\n\n};",
-                python: "class Solution:\n    def twoSum(self, nums, target):",
-                java: "class Solution {\n    public int[] twoSum(int[] nums, int target) {\n\n    }\n}"
-            }
+                javascript: 'var twoSum = function(nums, target) {\n\n};',
+                python: 'class Solution:\n    def twoSum(self, nums, target):',
+                java: 'class Solution {\n    public int[] twoSum(int[] nums, int target) {\n\n    }\n}',
+            },
         };
         mockedFetchQuestionById.mockResolvedValue(MOCK_QUESTION);
         mockedSession.findOne = jest.fn().mockResolvedValue(mockSession());
