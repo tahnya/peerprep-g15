@@ -57,13 +57,15 @@ process.env.QUESTION_SERVICE_URL = 'http://localhost:3002';
 
 async function mockQuestionFetch(input: URL, init?: RequestInit) {
     const url = new URL(input.toString());
-    if (url.pathname !== '/questions') {
+    const headers = new Headers(init?.headers);
+    if (url.pathname !== '/internal/questions') {
         return new Response('Not found', { status: 404 });
     }
 
-    const authorization = new Headers(init?.headers).get('Authorization');
-    if (!authorization?.startsWith('Bearer access-')) {
-        return new Response(JSON.stringify({ message: 'Missing or invalid token' }), {
+    const internalToken = headers.get('x-internal-service-token');
+
+    if (!internalToken) {
+        return new Response(JSON.stringify({ message: 'Missing internal service token' }), {
             status: 401,
             headers: { 'Content-Type': 'application/json' },
         });
