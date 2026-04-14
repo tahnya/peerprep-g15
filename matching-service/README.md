@@ -5,6 +5,7 @@ The matching service owns the MongoDB-backed queue used to pair users by topic a
 ## What it does
 
 - Accepts authenticated join and leave requests.
+- Accepts authenticated heartbeat requests to keep active queued users alive.
 - Tracks queue status for each user in MongoDB.
 - Produces a match when a compatible waiting user is found and stores it in MongoDB.
 - Retrieves a random question for each new match using the resolved match topic and difficulty.
@@ -138,6 +139,41 @@ Responses:
 - `403 Forbidden` when the `userId` does not match the authenticated user.
 - `404 Not Found` when the user is not currently queued.
 
+### Heartbeat
+
+`POST /matching/heartbeat` - Refresh queue liveness for a queued user.
+
+Use this while the user is waiting in queue (for example every 10 to 20 seconds) so active users are not expired as ghosts.
+
+Headers:
+
+- `Content-Type: application/json`
+- `Authorization: Bearer <accessToken>`
+
+Body:
+
+```json
+{
+    "userId": "user-123"
+}
+```
+
+Example:
+
+```bash
+curl -X POST http://localhost:3003/matching/heartbeat \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <accessToken>" \
+  -d '{"userId":"user-123"}'
+```
+
+Responses:
+
+- `200 OK` when heartbeat is recorded.
+- `400 Bad Request` when `userId` is missing.
+- `403 Forbidden` when the `userId` does not match the authenticated user.
+- `404 Not Found` when the user is not in an active queue entry.
+
 ### End
 
 `POST /matching/end` - End a match.
@@ -236,6 +272,7 @@ Routes except health are protected by `requireAuth`. The request `userId` must m
 - `MatchingController.health()` returns a simple service status response for uptime checks.
 - `MatchingController.join()` validates the request body, enforces auth identity matching, and either queues the user or returns a match.
 - `MatchingController.leave()` validates the request body, enforces auth identity matching, and removes the user from the queue.
+- `MatchingController.heartbeat()` validates the request body, enforces auth identity matching, and refreshes queued user liveness.
 - `MatchingController.status()` returns the current queue state for the authenticated user.
 - `MatchingController.queue()` returns the current queue snapshot.
 - `getRequiredString()` is a small internal helper that trims and validates request fields before the controller uses them.
@@ -253,6 +290,7 @@ Routes except health are protected by `requireAuth`. The request `userId` must m
 
 - `joinQueue(request, nowMs)` tries to match the joining user immediately, otherwise adds the user to the queue.
 - `leaveQueue(userId)` removes a user from whichever queue they are in.
+- `refreshQueueHeartbeat(userId, nowMs)` refreshes liveness for a queued user.
 - `getQueueStatus(userId, nowMs)` returns `matched`, `queued`, `timed_out`, or `not_found` for a user.
 - `listQueuedUsers(nowMs)` returns a flattened snapshot of all queued users.
 - `resetMatchingState()` clears the active matching repository and is mainly used by tests.
@@ -263,8 +301,9 @@ Routes except health are protected by `requireAuth`. The request `userId` must m
 The internal helper functions below support the queue policy and are useful when reading or testing the matching behavior:
 
 - `createCriteriaKey(topic, difficulty)` groups users into the same queue bucket.
-- `getWaitedMs(entry, nowMs)` calculates how long a user has been waiting.
-- `isTimedOut(entry, nowMs)` checks whether a user has exceeded the queue timeout.
+- `getQueuedWaitedMs(entry, nowMs)` calculates how long a user has been waiting (used for staged expansion fairness).
+- `getLastActivityAtMs(entry)` resolves the latest liveness timestamp (`lastHeartbeatAt` fallback to `joinedAt`).
+- `isTimedOut(entry, nowMs)` checks whether a user has exceeded inactivity timeout based on latest activity.
 - `getDifficultyGap(first, second)` computes the absolute difficulty distance.
 - `getMatchStage(joiningUser, candidate, nowMs)` applies the staged same-topic policy.
 - `findBestWaitingCandidate(joiningUser, nowMs)` searches all queued users for the best eligible match.
@@ -281,7 +320,13 @@ The queue uses staged matching:
 - Stage 0: exact topic and difficulty match.
 - Stage 1: same-topic adjacent difficulty match after the waiting user has been in queue for at least 15 seconds.
 - Stage 2: same-topic any difficulty match after the waiting user has been in queue for at least 30 seconds.
-- Timeout: users are removed from consideration after 60 seconds.
+- Timeout: users are removed after 60 seconds of inactivity (from latest heartbeat; fallback to join time when heartbeat is absent).
+
+### Ghost Users and Liveness
+
+- The service treats stale queued entries as ghosts when no heartbeat is received within the timeout window.
+- Heartbeats update queue liveness without changing staged matching fairness (which still uses joined time).
+- If clients stop sending heartbeat due to crash, disconnect, or network loss, entries self-expire via TTL cleanup.
 
 If multiple candidates qualify, the service prefers the lowest stage first and then the longest-waiting user.
 

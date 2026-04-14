@@ -5,6 +5,7 @@ import {
     leaveQueue,
     listQueuedUsers,
     endMatch,
+    refreshQueueHeartbeat,
 } from '../services/matching-service';
 import type { AuthenticatedRequest } from '../middleware/auth-middleware';
 
@@ -138,6 +139,38 @@ export class MatchingController {
 
             const status = await getQueueStatus(userId, undefined, accessToken);
             return res.status(200).json(status);
+        } catch (err) {
+            next(err);
+        }
+    }
+
+    static async heartbeat(req: Request, res: Response, next: NextFunction) {
+        try {
+            const auth = (req as AuthenticatedRequest).auth;
+            const userId = getRequiredString(req.body?.userId);
+
+            if (!userId) {
+                return res.status(400).json({
+                    message: 'userId is required',
+                });
+            }
+
+            if (auth?.userId !== userId) {
+                return res.status(403).json({
+                    message: 'Authenticated user does not match request userId',
+                });
+            }
+
+            const refreshed = await refreshQueueHeartbeat(userId);
+            if (!refreshed) {
+                return res.status(404).json({
+                    message: 'User is not in active queue',
+                });
+            }
+
+            return res.status(200).json({
+                message: 'Heartbeat recorded',
+            });
         } catch (err) {
             next(err);
         }

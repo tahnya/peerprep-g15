@@ -21,6 +21,7 @@ export interface MatchingRepository {
     purgeTimedOut(nowMs: number): Promise<void>;
     getMatchByUserId(userId: string): Promise<MatchResult | null>;
     getQueuedUserEntry(userId: string): Promise<QueueEntry | null>;
+    touchQueuedUserHeartbeat(userId: string, nowMs: number): Promise<QueueEntry | null>;
     listQueuedUsers(nowMs: number): Promise<QueueEntry[]>;
     enqueue(entry: QueueEntry): Promise<void>;
     removeQueuedUser(userId: string): Promise<QueueEntry | null>;
@@ -64,7 +65,15 @@ class MongoMatchingRepository implements MatchingRepository {
 
     async purgeTimedOut(nowMs: number) {
         const cutoff = new Date(nowMs - QUEUE_TIMEOUT_MS);
-        await QueueModel.deleteMany({ joinedAt: { $lte: cutoff } });
+        await QueueModel.deleteMany({
+            $or: [
+                { lastHeartbeatAt: { $lte: cutoff } },
+                {
+                    lastHeartbeatAt: { $exists: false },
+                    joinedAt: { $lte: cutoff },
+                },
+            ],
+        });
     }
 
     async getMatchByUserId(userId: string) {
@@ -86,11 +95,36 @@ class MongoMatchingRepository implements MatchingRepository {
         return documents.map((document) => queueDocumentToEntry(document));
     }
 
+    async touchQueuedUserHeartbeat(userId: string, nowMs: number) {
+        const cutoff = new Date(nowMs - QUEUE_TIMEOUT_MS);
+        const document = await QueueModel.findOneAndUpdate(
+            {
+                userId,
+                $or: [
+                    { lastHeartbeatAt: { $gt: cutoff } },
+                    {
+                        lastHeartbeatAt: { $exists: false },
+                        joinedAt: { $gt: cutoff },
+                    },
+                ],
+            },
+            {
+                $set: {
+                    lastHeartbeatAt: new Date(nowMs),
+                },
+            },
+            { new: true },
+        ).lean();
+
+        return document ? queueDocumentToEntry(document) : null;
+    }
+
     async enqueue(entry: QueueEntry) {
         await QueueModel.create({
             ...entry,
             topic: entry.topic.trim(),
             joinedAt: new Date(entry.joinedAt),
+            lastHeartbeatAt: new Date(entry.lastHeartbeatAt ?? entry.joinedAt),
         });
     }
 
@@ -138,7 +172,18 @@ class MongoMatchingRepository implements MatchingRepository {
         try {
             const maybeMatch = await session.withTransaction(async () => {
                 const cutoff = new Date(nowMs - QUEUE_TIMEOUT_MS);
-                await QueueModel.deleteMany({ joinedAt: { $lte: cutoff } }, { session });
+                await QueueModel.deleteMany(
+                    {
+                        $or: [
+                            { lastHeartbeatAt: { $lte: cutoff } },
+                            {
+                                lastHeartbeatAt: { $exists: false },
+                                joinedAt: { $lte: cutoff },
+                            },
+                        ],
+                    },
+                    { session },
+                );
 
                 const queuedDocuments = await QueueModel.find({})
                     .sort({ joinedAt: 1 })
@@ -288,6 +333,34 @@ class InMemoryMatchingRepository implements MatchingRepository {
         return null;
     }
 
+    async touchQueuedUserHeartbeat(userId: string, nowMs: number) {
+        for (const [criteriaKey, queue] of this.queueByCriteria.entries()) {
+            const index = queue.findIndex((entry) => entry.userId === userId);
+            if (index < 0) {
+                continue;
+            }
+
+            if (isTimedOut(queue[index], nowMs)) {
+                queue.splice(index, 1);
+                if (queue.length === 0) {
+                    this.queueByCriteria.delete(criteriaKey);
+                } else {
+                    this.queueByCriteria.set(criteriaKey, queue);
+                }
+                return null;
+            }
+
+            queue[index] = {
+                ...queue[index],
+                lastHeartbeatAt: new Date(nowMs).toISOString(),
+            };
+            this.queueByCriteria.set(criteriaKey, queue);
+            return queue[index];
+        }
+
+        return null;
+    }
+
     async listQueuedUsers(nowMs: number) {
         await this.purgeTimedOut(nowMs);
         return Array.from(this.queueByCriteria.values()).flat();
@@ -394,13 +467,17 @@ function resolveMatchCriteria(waitingUser: QueueEntry, joiningUser: QueueEntry) 
 }
 
 // Returns how long a queued user has waited in milliseconds.
-function getWaitedMs(entry: QueueEntry, nowMs: number) {
+function getQueuedWaitedMs(entry: QueueEntry, nowMs: number) {
     return Math.max(0, nowMs - new Date(entry.joinedAt).getTime());
+}
+
+function getLastActivityAtMs(entry: QueueEntry) {
+    return new Date(entry.lastHeartbeatAt ?? entry.joinedAt).getTime();
 }
 
 // Determines if a queued user has exceeded the maximum wait time and should be timed out.
 function isTimedOut(entry: QueueEntry, nowMs: number) {
-    return getWaitedMs(entry, nowMs) >= QUEUE_TIMEOUT_MS;
+    return Math.max(0, nowMs - getLastActivityAtMs(entry)) >= QUEUE_TIMEOUT_MS;
 }
 
 function getDifficultyGap(first: Difficulty, second: Difficulty) {
@@ -419,7 +496,7 @@ function getMatchStage(joiningUser: QueueEntry, candidate: QueueEntry, nowMs: nu
         return 0;
     }
 
-    const waitedMs = getWaitedMs(candidate, nowMs);
+    const waitedMs = getQueuedWaitedMs(candidate, nowMs);
     if (sameTopic && difficultyGap === 1 && waitedMs >= TOPIC_EXPANSION_WAIT_MS) {
         return 1;
     }
@@ -676,6 +753,7 @@ export async function joinQueue(request: MatchRequest, nowMs = Date.now(), acces
         ...request,
         topic: request.topic.trim(),
         joinedAt: new Date(nowMs).toISOString(),
+        lastHeartbeatAt: new Date(nowMs).toISOString(),
     };
 
     const match = await attemptMatchForEntry(entry, nowMs, accessToken, false);
@@ -707,6 +785,18 @@ export async function joinQueue(request: MatchRequest, nowMs = Date.now(), acces
     await safeRecordQueueEvent(entry, 'queued', nowMs);
 
     return { state: 'queued' as const, entry };
+}
+
+// Refreshes liveness for a queued user so inactive ghosts can expire by TTL.
+export async function refreshQueueHeartbeat(userId: string, nowMs = Date.now()) {
+    await repository.purgeTimedOut(nowMs);
+
+    const touched = await repository.touchQueuedUserHeartbeat(userId, nowMs);
+    if (!touched) {
+        return false;
+    }
+
+    return true;
 }
 
 // Removes a user from queue and reports whether anything was removed.

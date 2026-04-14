@@ -16,6 +16,7 @@ export interface MatchRequest {
 
 export interface QueueEntry extends MatchRequest {
     joinedAt: string;
+    lastHeartbeatAt?: string;
 }
 
 export interface MatchResult {

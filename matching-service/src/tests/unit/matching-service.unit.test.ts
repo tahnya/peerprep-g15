@@ -7,6 +7,7 @@ import {
     leaveQueue,
     listQueuedUsers,
     pickBestWaitingUserIndex,
+    refreshQueueHeartbeat,
     resetMatchingState,
     setMatchingRepository,
 } from '../../services/matching-service';
@@ -500,6 +501,9 @@ test('duplicate enqueue conflict is treated as idempotent queued response', asyn
         async getQueuedUserEntry(userId: string) {
             return userId === existingEntry.userId ? existingEntry : null;
         },
+        async touchQueuedUserHeartbeat() {
+            return null;
+        },
         async listQueuedUsers() {
             return [];
         },
@@ -679,4 +683,60 @@ test('expired queued users are never matched with new joiners', async () => {
     const currentQueue = await listQueuedUsers(baseTimeMs + 60_000);
     assert.equal(currentQueue.length, 1);
     assert.equal(currentQueue[0].userId, 'user-fresh');
+});
+
+test('heartbeat refresh keeps queued user alive beyond original join timeout', async () => {
+    const joinedAtMs = new Date('2026-04-04T16:00:00.000Z').getTime();
+
+    const joinResult = await joinQueue(
+        {
+            userId: 'user-heartbeat-alive',
+            topic: 'graphs',
+            difficulty: 'easy',
+        },
+        joinedAtMs,
+        'access-user-heartbeat-alive',
+    );
+    assert.equal(joinResult.state, 'queued');
+
+    const refreshed = await refreshQueueHeartbeat('user-heartbeat-alive', joinedAtMs + 59_000);
+    assert.equal(refreshed, true);
+
+    const statusAfterOriginalTimeout = await getQueueStatus(
+        'user-heartbeat-alive',
+        joinedAtMs + 100_000,
+        'access-user-heartbeat-alive',
+    );
+    assert.equal(statusAfterOriginalTimeout.state, 'queued');
+});
+
+test('queued user times out after heartbeat TTL expires', async () => {
+    const joinedAtMs = new Date('2026-04-04T16:10:00.000Z').getTime();
+
+    const joinResult = await joinQueue(
+        {
+            userId: 'user-heartbeat-timeout',
+            topic: 'graphs',
+            difficulty: 'easy',
+        },
+        joinedAtMs,
+        'access-user-heartbeat-timeout',
+    );
+    assert.equal(joinResult.state, 'queued');
+
+    const refreshed = await refreshQueueHeartbeat('user-heartbeat-timeout', joinedAtMs + 10_000);
+    assert.equal(refreshed, true);
+
+    const statusAfterHeartbeatExpiry = await getQueueStatus(
+        'user-heartbeat-timeout',
+        joinedAtMs + 70_000,
+        'access-user-heartbeat-timeout',
+    );
+    assert.equal(statusAfterHeartbeatExpiry.state, 'timed_out');
+
+    const refreshAfterTimeout = await refreshQueueHeartbeat(
+        'user-heartbeat-timeout',
+        joinedAtMs + 70_001,
+    );
+    assert.equal(refreshAfterTimeout, false);
 });

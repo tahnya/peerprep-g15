@@ -7,6 +7,7 @@ export interface QueueDocument {
     difficulty: Difficulty;
     proficiency?: number;
     joinedAt: Date;
+    lastHeartbeatAt: Date;
 }
 
 export interface MatchDocument {
@@ -47,6 +48,7 @@ const queueSchema = new Schema<QueueDocument>(
         difficulty: { type: String, required: true, enum: ['easy', 'medium', 'hard'] },
         proficiency: { type: Number },
         joinedAt: { type: Date, required: true },
+        lastHeartbeatAt: { type: Date, required: true, index: true },
     },
     { timestamps: false },
 );
@@ -124,6 +126,7 @@ export function queueDocumentToEntry(document: QueueDocument) {
         difficulty: document.difficulty,
         proficiency: document.proficiency,
         joinedAt: document.joinedAt.toISOString(),
+        lastHeartbeatAt: document.lastHeartbeatAt.toISOString(),
     };
 }
 
