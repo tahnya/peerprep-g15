@@ -26,6 +26,7 @@ const sessionSchema = new mongoose.Schema(
                 timestamp: { type: Date, default: Date.now },
             },
         ],
+        yjsState: { type: Buffer, default: null },
     },
     { timestamps: true },
 );

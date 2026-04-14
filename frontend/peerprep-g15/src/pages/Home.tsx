@@ -3,7 +3,6 @@ import '../App.css';
 
 import questionAxios from '../questionAxios.ts';
 import matchAxios from '../matchAxios.ts';
-import collabAxios from '../collabAxios.ts';
 import NavBar from '../components/NavBar';
 import { useNavigate } from 'react-router';
 
@@ -186,25 +185,6 @@ const Home = () => {
         }
     };
 
-    const getSession = async (roomId: string, userIds: string[], questionId: string) => {
-        try {
-            const response = await collabAxios.post('/collab/create', {
-                roomId,
-                userIds,
-                questionId,
-            });
-
-            console.log('Session response:', response.data);
-
-            // const { roomId } = response.data;
-
-            navigate(`/collab/${roomId}`);
-        } catch (err: any) {
-            console.log('failed sess: ', err);
-            setMatchingMessage(err.response?.data?.message || 'Failed to create collab session.');
-        }
-    };
-
     const handleMatched = async (matchData: any) => {
         const currentUserId = localStorage.getItem('userId');
         if (!currentUserId) {
@@ -222,11 +202,11 @@ const Home = () => {
         console.log('Room ID:', roomId);
         console.log('User IDs:', userIds);
 
-        setMatchingMessage('Match found! Creating session...');
+        setMatchingMessage('Match found! Joining session...');
         setIsMatching(false);
         setQueuedUserId(null);
-
-        await getSession(roomId, userIds, questionId);
+        
+        navigate(`/collab/${roomId }`);
     };
 
     return (

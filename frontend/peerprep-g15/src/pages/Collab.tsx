@@ -2,8 +2,6 @@ import { useEffect, useState, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useParams } from 'react-router';
 import NavBar from '../components/NavBar';
-import questionAxios from '../questionAxios';
-import matchAxios from '../matchAxios';
 import * as Y from 'yjs';
 import { MonacoBinding } from 'y-monaco';
 import Editor from '@monaco-editor/react';
@@ -125,7 +123,8 @@ const Collab = () => {
             s.emit('join-room', roomId, userId, name);
         });
 
-        s.on('session-state', (session: SessionState) => {
+        s.on('session-state', (data: { session: SessionState; question: Question }) => {
+            const { session, question } = data;
             setSession(session);
             setSessionStatus(session?.status || 'pending');
             setInitialSyncDone(false);
@@ -134,20 +133,9 @@ const Collab = () => {
                 setSelectedLanguage(session.language);
             }
 
-            if (session?.status !== 'active') {
-                starterInserted.current = false;
-            }
-
-            if (session?.questionId) {
-                questionAxios
-                    .get<Question>(`/questions/${session.questionId}`)
-                    .then((res) => {
-                        console.log('constraints:', res.data.constraints);
-                        console.log('full question:', res.data);
-                        setQuestion(res.data);
-                        questionRef.current = res.data;
-                    })
-                    .catch(() => {});
+            if (question) {
+                setQuestion(question);
+                questionRef.current = question;
             }
         });
 
@@ -185,31 +173,14 @@ const Collab = () => {
             setMessages((prev) => [...prev, msg]);
         });
 
-        s.on('session-started', (data: { language: string; insertStarter: boolean }) => {
-            starterInserted.current = true;
-            setInitialSyncDone(true);
+        s.on('session-started', (data: { language: string; yjsState?: ArrayBuffer }) => {
             setSessionStatus('active');
             setSelectedLanguage(data.language);
+            setInitialSyncDone(true);
+            starterInserted.current = true;
 
-            // Only the designated user inserts — do it here, not in useEffect
-            if (data.insertStarter) {
-                // Wait for question to be available
-                const tryInsert = (attempts = 0) => {
-                    const q = questionRef.current;
-                    const lang = data.language;
-                    if (!q) {
-                        if (attempts < 20) setTimeout(() => tryInsert(attempts + 1), 100);
-                        return;
-                    }
-                    const starter = q.starterCode?.[lang];
-                    if (!starter) return;
-                    const current = ytext.current.toString().trim();
-                    if (current.length > 0) return; // already has content
-                    ydoc.current.transact(() => {
-                        ytext.current.insert(0, starter);
-                    });
-                };
-                tryInsert();
+            if (data.yjsState) {
+                Y.applyUpdate(ydoc.current, new Uint8Array(data.yjsState), 'remote');
             }
         });
 
@@ -437,12 +408,6 @@ const Collab = () => {
     };
 
     const handleLeave = async () => {
-        try {
-            await matchAxios.post('/matching/end', { matchId: roomId });
-            console.log('Match ended');
-        } catch (err: any) {
-            console.error('Failed to end match:', err.response?.data || err.message);
-        }
         socket?.emit('leave-session', roomId, userId);
         window.location.href = '/home';
     };

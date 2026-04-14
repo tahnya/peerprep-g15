@@ -9,4 +9,8 @@ export const config = {
         baseUrl: process.env.QUESTION_SERVICE_URL ?? 'http://localhost:3002',
         internalServiceToken: process.env.INTERNAL_SERVICE_TOKEN ?? '',
     },
+    matchingService: {
+        baseUrl: process.env.MATCHING_SERVICE_URL ?? 'http://localhost:3003',
+        internalServiceToken: process.env.INTERNAL_SERVICE_TOKEN ?? '',
+    },
 };
