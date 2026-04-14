@@ -6,4 +6,3 @@ import { requireInternalAuth } from '../middleware/internal-auth';
 export const internalSessionRouter = Router();
 
 internalSessionRouter.post('/sessions', requireInternalAuth, createSessionHandler);
-

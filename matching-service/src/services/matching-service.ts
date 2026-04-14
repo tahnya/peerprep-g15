@@ -144,7 +144,9 @@ class MongoMatchingRepository implements MatchingRepository {
                     .sort({ joinedAt: 1 })
                     .session(session)
                     .lean();
-                const queuedUsers = queuedDocuments.map((document) => queueDocumentToEntry(document));
+                const queuedUsers = queuedDocuments.map((document) =>
+                    queueDocumentToEntry(document),
+                );
 
                 const waitingUser = findBestWaitingCandidate(queuedUsers, entry, nowMs);
                 if (!waitingUser) {
@@ -154,7 +156,7 @@ class MongoMatchingRepository implements MatchingRepository {
                 const criteria = resolveMatchCriteria(waitingUser, entry);
                 const question = await fetchRandomQuestionForMatch(
                     criteria.topic,
-                    criteria.difficulty
+                    criteria.difficulty,
                 );
 
                 if (!question) {
@@ -593,10 +595,7 @@ async function attemptMatchForEntry(
     }
 
     const criteria = resolveMatchCriteria(waitingUser, entry);
-    const question = await fetchRandomQuestionForMatch(
-        criteria.topic,
-        criteria.difficulty,
-    );
+    const question = await fetchRandomQuestionForMatch(criteria.topic, criteria.difficulty);
 
     if (!question) {
         console.warn('Match candidate found but no valid question available, keeping user queued', {
@@ -643,7 +642,6 @@ async function attemptMatchForEntry(
     }
 
     await createCollabSession(match.matchId, match.userIds, String(match.question.questionId));
-
 
     await Promise.all([
         safeRecordQueueEvent(waitingUser, 'matched', nowMs, match.matchId),

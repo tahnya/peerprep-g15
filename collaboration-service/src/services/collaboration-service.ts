@@ -60,11 +60,9 @@ export async function voteLanguage(roomId: string, userId: string, language: str
     if (!session) throw new AppError(404, 'Session not found');
     if (!session.questionId) throw new AppError(400, 'Session has no questionId');
 
-
     const votes = session?.languageVotes;
     if (votes?.size === 2) {
         const languages = Array.from(votes.values());
-
 
         if (languages[0] === languages[1]) {
             const question = await fetchQuestionById(session.questionId);
@@ -76,16 +74,19 @@ export async function voteLanguage(roomId: string, userId: string, language: str
             if (starterCode) {
                 ytext.insert(0, starterCode);
             }
-            
+
             const updated = await Session.findOneAndUpdate(
                 { roomId },
-                { status: 'active', language: languages[0], yjsState: Buffer.from(Y.encodeStateAsUpdate(ydoc)), },
+                {
+                    status: 'active',
+                    language: languages[0],
+                    yjsState: Buffer.from(Y.encodeStateAsUpdate(ydoc)),
+                },
                 { new: true },
             );
             ydoc.destroy();
 
             return updated;
-
         }
 
         return await endSession(roomId);
@@ -95,11 +96,7 @@ export async function voteLanguage(roomId: string, userId: string, language: str
 }
 
 export async function persistYjsState(roomId: string, yjsState: Buffer, code: string) {
-    return await Session.findOneAndUpdate(
-        { roomId },
-        { yjsState, code },
-        { new: true },
-    );
+    return await Session.findOneAndUpdate({ roomId }, { yjsState, code }, { new: true });
 }
 
 export async function executeCode(roomId: string, code: string, language: string) {

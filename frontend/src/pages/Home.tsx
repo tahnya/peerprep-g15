@@ -204,8 +204,8 @@ const Home = () => {
         setMatchingMessage('Match found! Joining session...');
         setIsMatching(false);
         setQueuedUserId(null);
-        
-        navigate(`/collab/${roomId }`);
+
+        navigate(`/collab/${roomId}`);
     };
 
     return (

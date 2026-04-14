@@ -99,7 +99,6 @@ export async function fetchRandomQuestionForMatch(
     topic: string,
     difficulty: Difficulty,
 ): Promise<MatchedQuestion | undefined> {
-
     const questionsUrl = new URL('/internal/questions', config.questionService.baseUrl);
     const questionDifficulty = toQuestionDifficulty(difficulty);
     if (!questionDifficulty) {

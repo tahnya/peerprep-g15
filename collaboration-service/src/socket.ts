@@ -8,7 +8,7 @@ import {
     handleDisconnect,
     submitCode,
     addMessageToSession,
-    persistYjsState
+    persistYjsState,
 } from './services/collaboration-service';
 import { ExecutionSpec, TestCase } from './types/execution';
 import { fetchQuestionById } from './services/question-service';
@@ -98,7 +98,7 @@ export function initSocket(server: http.Server) {
                 question = await fetchQuestionById(session.questionId);
             }
 
-            socket.emit('session-state', {session, question});
+            socket.emit('session-state', { session, question });
 
             if (roomDocs.has(roomId)) {
                 const state = Y.encodeStateAsUpdate(roomDocs.get(roomId)!);
@@ -285,7 +285,7 @@ export function initSocket(server: http.Server) {
             await endSession(roomId);
             await endMatchInMatchingService(roomId);
             roomDocs.delete(roomId);
-            persistTimers.delete(roomId); 
+            persistTimers.delete(roomId);
             io.to(roomId).emit('session-ended', { reason: 'left' });
             socket.leave(roomId);
         });

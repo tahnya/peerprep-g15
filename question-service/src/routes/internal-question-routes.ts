@@ -7,5 +7,5 @@ export const internalQuestionRouter = Router();
 
 internalQuestionRouter.use(requireInternalAuth);
 
-internalQuestionRouter.get('/questions',requireInternalAuth, getQuestions);
+internalQuestionRouter.get('/questions', requireInternalAuth, getQuestions);
 internalQuestionRouter.get('/questions/:id', requireInternalAuth, getQuestionById);
