@@ -31,7 +31,12 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
         });
     }
 
-    if (typeof err === 'object' && err !== null && 'code' in err && (err as { code?: number }).code === 11000) {
+    if (
+        typeof err === 'object' &&
+        err !== null &&
+        'code' in err &&
+        (err as { code?: number }).code === 11000
+    ) {
         return res.status(409).json({
             error: {
                 code: 'DUPLICATE_QUESTION',

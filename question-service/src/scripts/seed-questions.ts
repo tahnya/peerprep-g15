@@ -9,7 +9,7 @@ async function main() {
     await connectDB(config.mongo.uri, config.mongo.dbName);
 
     await Question.deleteMany({});
-    
+
     for (const question of sampleQuestions) {
         await Question.create(question);
     }

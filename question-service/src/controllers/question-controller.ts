@@ -9,8 +9,15 @@ function normalizeText(value: string): string {
         .replace(/[^\p{L}\p{N}\s]/gu, '');
 }
 
-function isMongoDuplicateKeyError(err: unknown): err is { code: number; keyPattern?: Record<string, number> } {
-    return typeof err === 'object' && err !== null && 'code' in err && (err as { code?: number }).code === 11000;
+function isMongoDuplicateKeyError(
+    err: unknown,
+): err is { code: number; keyPattern?: Record<string, number> } {
+    return (
+        typeof err === 'object' &&
+        err !== null &&
+        'code' in err &&
+        (err as { code?: number }).code === 11000
+    );
 }
 
 export async function getQuestions(req: Request, res: Response, next: NextFunction) {

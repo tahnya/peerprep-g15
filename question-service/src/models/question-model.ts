@@ -55,7 +55,9 @@ function stableStringify(value: unknown): string {
     }
 
     if (value instanceof Map) {
-        return stableStringify(Object.fromEntries([...value.entries()].sort(([a], [b]) => a.localeCompare(b))));
+        return stableStringify(
+            Object.fromEntries([...value.entries()].sort(([a], [b]) => a.localeCompare(b))),
+        );
     }
 
     if (typeof value === 'object') {
