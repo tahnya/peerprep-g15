@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import mongoose from 'mongoose';
 import type { NextFunction, Request, Response } from 'express';
 import { errorHandler } from '../../../middleware/error-middleware';
 import { AppError } from '../../../utils/app-error';
@@ -25,6 +26,63 @@ describe('errorHandler', () => {
                 code: 'BAD_REQUEST',
                 message: 'Invalid payload',
                 details: { field: 'title' },
+            },
+        });
+    });
+
+    it('returns 400 for mongoose validation errors', () => {
+        const err = new mongoose.Error.ValidationError();
+        err.message = 'Validation failed';
+
+        const req = {} as Request;
+        const res = createMockRes();
+        const next = vi.fn() as NextFunction;
+
+        errorHandler(err, req, res, next);
+
+        expect(res.status).toHaveBeenCalledWith(400);
+        expect(res.json).toHaveBeenCalledWith({
+            error: {
+                code: 'VALIDATION_ERROR',
+                message: 'Validation failed',
+            },
+        });
+    });
+
+    it('returns 409 for mongoose version errors', () => {
+        const err = new mongoose.Error.VersionError(
+            { _doc: { _id: 'abc123', title: 'Two Sum' } } as never,
+            3,
+            [],
+        );
+
+        const req = {} as Request;
+        const res = createMockRes();
+        const next = vi.fn() as NextFunction;
+
+        errorHandler(err, req, res, next);
+
+        expect(res.status).toHaveBeenCalledWith(409);
+        expect(res.json).toHaveBeenCalledWith({
+            error: {
+                code: 'VERSION_CONFLICT',
+                message: 'Question was modified by another admin. Refresh and try again.',
+            },
+        });
+    });
+
+    it('returns 409 for duplicate key errors', () => {
+        const req = {} as Request;
+        const res = createMockRes();
+        const next = vi.fn() as NextFunction;
+
+        errorHandler({ code: 11000 }, req, res, next);
+
+        expect(res.status).toHaveBeenCalledWith(409);
+        expect(res.json).toHaveBeenCalledWith({
+            error: {
+                code: 'DUPLICATE_QUESTION',
+                message: 'Duplicate question detected',
             },
         });
     });

@@ -95,8 +95,8 @@ describe('question-controller', () => {
     it('getQuestionById returns question when found', async () => {
         const req = { params: { id: '5' } } as unknown as Request;
         const res = createMockRes();
-
         const question = { questionId: 5, title: 'Two Sum' };
+
         vi.mocked(Question.findOne).mockResolvedValue(question as never);
 
         await getQuestionById(req, res, next);
@@ -105,11 +105,47 @@ describe('question-controller', () => {
         expect(res.json).toHaveBeenCalledWith(question);
     });
 
-    it('createQuestion creates and returns 201', async () => {
+    it('createQuestion returns 409 when similar normalized title already exists', async () => {
+        const req = {
+            body: { questionId: 1, title: 'Two   Sum!!!' },
+        } as Request;
+        const res = createMockRes();
+
+        const select = vi.fn().mockReturnThis();
+        const lean = vi.fn().mockResolvedValue({
+            questionId: 99,
+            title: 'Two Sum',
+        });
+
+        vi.mocked(Question.findOne).mockReturnValue({ select, lean } as never);
+
+        await createQuestion(req, res, next);
+
+        expect(Question.findOne).toHaveBeenCalledWith({
+            normalizedTitle: 'two sum',
+        });
+        expect(select).toHaveBeenCalledWith('questionId title');
+        expect(res.status).toHaveBeenCalledWith(409);
+        expect(res.json).toHaveBeenCalledWith({
+            message: 'A question with a very similar title already exists',
+            existingQuestion: {
+                questionId: 99,
+                title: 'Two Sum',
+            },
+        });
+        expect(Question.create).not.toHaveBeenCalled();
+    });
+
+    it('createQuestion creates and returns 201 when no duplicate-like title exists', async () => {
         const req = {
             body: { questionId: 1, title: 'Two Sum' },
         } as Request;
         const res = createMockRes();
+
+        const select = vi.fn().mockReturnThis();
+        const lean = vi.fn().mockResolvedValue(null);
+
+        vi.mocked(Question.findOne).mockReturnValue({ select, lean } as never);
 
         const created = { questionId: 1, title: 'Two Sum' };
         vi.mocked(Question.create).mockResolvedValue(created as never);
@@ -119,6 +155,31 @@ describe('question-controller', () => {
         expect(Question.create).toHaveBeenCalledWith(req.body);
         expect(res.status).toHaveBeenCalledWith(201);
         expect(res.json).toHaveBeenCalledWith(created);
+    });
+
+    it('createQuestion returns 409 on duplicate key error', async () => {
+        const req = {
+            body: { questionId: 1, title: 'Two Sum' },
+        } as Request;
+        const res = createMockRes();
+
+        const select = vi.fn().mockReturnThis();
+        const lean = vi.fn().mockResolvedValue(null);
+
+        vi.mocked(Question.findOne).mockReturnValue({ select, lean } as never);
+
+        vi.mocked(Question.create).mockRejectedValue({
+            code: 11000,
+            keyPattern: { contentFingerprint: 1 },
+        });
+
+        await createQuestion(req, res, next);
+
+        expect(res.status).toHaveBeenCalledWith(409);
+        expect(res.json).toHaveBeenCalledWith({
+            message: 'Duplicate question detected',
+            details: { contentFingerprint: 1 },
+        });
     });
 
     it('updateQuestion returns 400 for invalid id', async () => {
@@ -131,40 +192,120 @@ describe('question-controller', () => {
         expect(res.json).toHaveBeenCalledWith({ message: 'Invalid question id' });
     });
 
-    it('updateQuestion returns 404 when question missing', async () => {
+    it('updateQuestion returns 400 when __v is missing', async () => {
         const req = {
             params: { id: '10' },
             body: { title: 'Updated' },
         } as unknown as Request;
         const res = createMockRes();
-
-        vi.mocked(Question.findOneAndUpdate).mockResolvedValue(null);
 
         await updateQuestion(req, res, next);
 
-        expect(Question.findOneAndUpdate).toHaveBeenCalledWith(
-            { questionId: 10 },
-            { title: 'Updated' },
-            { new: true, runValidators: true },
-        );
-        expect(res.status).toHaveBeenCalledWith(404);
-        expect(res.json).toHaveBeenCalledWith({ message: 'Question not found' });
+        expect(res.status).toHaveBeenCalledWith(400);
+        expect(res.json).toHaveBeenCalledWith({
+            message: 'Missing or invalid __v for concurrency control',
+        });
     });
 
-    it('updateQuestion returns updated question', async () => {
+    it('updateQuestion performs version-checked update and strips immutable fields', async () => {
         const req = {
             params: { id: '10' },
-            body: { title: 'Updated' },
+            body: {
+                __v: 3,
+                _id: 'mongo-id',
+                questionId: 999,
+                createdAt: 'x',
+                updatedAt: 'y',
+                title: 'Updated',
+                difficulty: 'Hard',
+            },
         } as unknown as Request;
         const res = createMockRes();
 
-        const updated = { questionId: 10, title: 'Updated' };
+        const updated = { questionId: 10, title: 'Updated', __v: 4 };
         vi.mocked(Question.findOneAndUpdate).mockResolvedValue(updated as never);
 
         await updateQuestion(req, res, next);
 
+        expect(Question.findOneAndUpdate).toHaveBeenCalledWith(
+            { questionId: 10, __v: 3 },
+            {
+                $set: {
+                    title: 'Updated',
+                    difficulty: 'Hard',
+                },
+                $inc: { __v: 1 },
+            },
+            {
+                new: true,
+                runValidators: true,
+                context: 'query',
+            },
+        );
         expect(res.status).toHaveBeenCalledWith(200);
         expect(res.json).toHaveBeenCalledWith(updated);
+    });
+
+    it('updateQuestion returns 404 when question does not exist', async () => {
+        const req = {
+            params: { id: '10' },
+            body: { __v: 3, title: 'Updated' },
+        } as unknown as Request;
+        const res = createMockRes();
+
+        vi.mocked(Question.findOneAndUpdate).mockResolvedValue(null);
+        vi.mocked(Question.findOne).mockReturnValue({
+            select: vi.fn().mockReturnThis(),
+            lean: vi.fn().mockResolvedValue(null),
+        } as never);
+
+        await updateQuestion(req, res, next);
+
+        expect(res.status).toHaveBeenCalledWith(404);
+        expect(res.json).toHaveBeenCalledWith({ message: 'Question not found' });
+    });
+
+    it('updateQuestion returns 409 when version is stale', async () => {
+        const req = {
+            params: { id: '10' },
+            body: { __v: 3, title: 'Updated' },
+        } as unknown as Request;
+        const res = createMockRes();
+
+        vi.mocked(Question.findOneAndUpdate).mockResolvedValue(null);
+        vi.mocked(Question.findOne).mockReturnValue({
+            select: vi.fn().mockReturnThis(),
+            lean: vi.fn().mockResolvedValue({ __v: 4 }),
+        } as never);
+
+        await updateQuestion(req, res, next);
+
+        expect(res.status).toHaveBeenCalledWith(409);
+        expect(res.json).toHaveBeenCalledWith({
+            message: 'Question was modified by another admin. Refresh and try again.',
+            currentVersion: 4,
+        });
+    });
+
+    it('updateQuestion returns 409 on duplicate key error', async () => {
+        const req = {
+            params: { id: '10' },
+            body: { __v: 3, title: 'Updated' },
+        } as unknown as Request;
+        const res = createMockRes();
+
+        vi.mocked(Question.findOneAndUpdate).mockRejectedValue({
+            code: 11000,
+            keyPattern: { contentFingerprint: 1 },
+        });
+
+        await updateQuestion(req, res, next);
+
+        expect(res.status).toHaveBeenCalledWith(409);
+        expect(res.json).toHaveBeenCalledWith({
+            message: 'Update would create a duplicate question',
+            details: { contentFingerprint: 1 },
+        });
     });
 
     it('deleteQuestion returns 400 for invalid id', async () => {
