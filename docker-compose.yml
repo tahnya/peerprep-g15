@@ -55,6 +55,10 @@ services:
         depends_on:
             user-service:
                 condition: service_healthy
+            question-service:
+                condition: service_healthy
+            collaboration-service:
+                condition: service_healthy
             redis:
                 condition: service_healthy
         restart: unless-stopped
@@ -73,7 +77,9 @@ services:
         env_file:
             - ./collaboration-service/.env.docker
         depends_on:
-            user-service:
+            question-service:
+                condition: service_healthy
+            history-service:
                 condition: service_healthy
         restart: unless-stopped
         healthcheck:

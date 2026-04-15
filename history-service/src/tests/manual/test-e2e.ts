@@ -98,28 +98,34 @@ async function runManualTest(server: Server) {
     assert(health.status === 200, 'Health check should return 200');
 
     printStep('Step 1: Save first attempt');
-    const firstSave = await request(baseUrl, 'POST', '/save-attempt', {
-        userId: TEST_USER_ID,
-        roomId: TEST_ROOM_ID,
-        questionId: TEST_QUESTION_ID,
-        questionTitle: TEST_QUESTION_TITLE,
-        language: TEST_LANGUAGE,
-        code: 'function twoSum() { return []; }',
-        passed: false,
-        results: [
-            {
-                input: [2, 7, 11, 15],
-                expected: [0, 1],
-                actual: [0],
-                passed: false,
-                stderr: null,
-                compileOutput: null,
-                message: 'Wrong answer',
-                status: 'Wrong Answer',
-            },
-        ],
-        submittedAt: '2026-04-13T00:00:00.000Z',
-    }, getAuthHeader(TEST_USER_ID));
+    const firstSave = await request(
+        baseUrl,
+        'POST',
+        '/save-attempt',
+        {
+            userId: TEST_USER_ID,
+            roomId: TEST_ROOM_ID,
+            questionId: TEST_QUESTION_ID,
+            questionTitle: TEST_QUESTION_TITLE,
+            language: TEST_LANGUAGE,
+            code: 'function twoSum() { return []; }',
+            passed: false,
+            results: [
+                {
+                    input: [2, 7, 11, 15],
+                    expected: [0, 1],
+                    actual: [0],
+                    passed: false,
+                    stderr: null,
+                    compileOutput: null,
+                    message: 'Wrong answer',
+                    status: 'Wrong Answer',
+                },
+            ],
+            submittedAt: '2026-04-13T00:00:00.000Z',
+        },
+        getAuthHeader(TEST_USER_ID),
+    );
     console.log('Status:', firstSave.status);
     console.log('Body:', firstSave.body);
     assert(firstSave.status === 201, 'First save should return 201');
@@ -129,42 +135,54 @@ async function runManualTest(server: Server) {
     assert(firstAttempt.passed === false, 'Saved attempt should keep passed=false');
 
     printStep('Step 2: Save second attempt');
-    const secondSave = await request(baseUrl, 'POST', '/save-attempt', {
-        userId: TEST_USER_ID,
-        roomId: TEST_ROOM_ID,
-        questionId: TEST_QUESTION_ID,
-        questionTitle: TEST_QUESTION_TITLE,
-        language: TEST_LANGUAGE,
-        code: 'function twoSum() { return [0, 1]; }',
-        passed: true,
-        results: [
-            {
-                input: [2, 7, 11, 15],
-                expected: [0, 1],
-                actual: [0, 1],
-                passed: true,
-                stderr: null,
-                compileOutput: null,
-                message: null,
-                status: 'Accepted',
-            },
-        ],
-    }, getAuthHeader(TEST_USER_ID));
+    const secondSave = await request(
+        baseUrl,
+        'POST',
+        '/save-attempt',
+        {
+            userId: TEST_USER_ID,
+            roomId: TEST_ROOM_ID,
+            questionId: TEST_QUESTION_ID,
+            questionTitle: TEST_QUESTION_TITLE,
+            language: TEST_LANGUAGE,
+            code: 'function twoSum() { return [0, 1]; }',
+            passed: true,
+            results: [
+                {
+                    input: [2, 7, 11, 15],
+                    expected: [0, 1],
+                    actual: [0, 1],
+                    passed: true,
+                    stderr: null,
+                    compileOutput: null,
+                    message: null,
+                    status: 'Accepted',
+                },
+            ],
+        },
+        getAuthHeader(TEST_USER_ID),
+    );
     console.log('Status:', secondSave.status);
     console.log('Body:', secondSave.body);
     assert(secondSave.status === 201, 'Second save should return 201');
 
     printStep('Step 3: Save attempt for another user');
-    const otherUserSave = await request(baseUrl, 'POST', '/save-attempt', {
-        userId: 'manual-user-2',
-        roomId: 'manual-room-2',
-        questionId: '7',
-        questionTitle: 'Reverse String',
-        language: 'python',
-        code: 'def reverse_string(s):\n    return s[::-1]',
-        passed: true,
-        submittedAt: '2026-04-13T01:00:00.000Z',
-    }, getAuthHeader('manual-user-2'));
+    const otherUserSave = await request(
+        baseUrl,
+        'POST',
+        '/save-attempt',
+        {
+            userId: 'manual-user-2',
+            roomId: 'manual-room-2',
+            questionId: '7',
+            questionTitle: 'Reverse String',
+            language: 'python',
+            code: 'def reverse_string(s):\n    return s[::-1]',
+            passed: true,
+            submittedAt: '2026-04-13T01:00:00.000Z',
+        },
+        getAuthHeader('manual-user-2'),
+    );
     console.log('Status:', otherUserSave.status);
     console.log('Body:', otherUserSave.body);
     assert(otherUserSave.status === 201, 'Other user save should return 201');
@@ -214,7 +232,8 @@ async function main() {
     let server: Server | undefined;
     let exitCode = 0;
     try {
-        process.env.INTERNAL_SERVICE_TOKEN = process.env.INTERNAL_SERVICE_TOKEN ?? 'manual-test-token';
+        process.env.INTERNAL_SERVICE_TOKEN =
+            process.env.INTERNAL_SERVICE_TOKEN ?? 'manual-test-token';
 
         setAuthServiceFetch(async (_input, init) => {
             const internalToken = init?.headers
