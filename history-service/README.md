@@ -14,6 +14,8 @@ Create a `.env` file in `history-service/`:
 PORT=3005
 MONGO_URI=mongodb://127.0.0.1:27017
 MONGO_DB_NAME=add-db-name
+USER_SERVICE_URL=http://localhost:3001
+INTERNAL_SERVICE_TOKEN=add-internal-token
 ```
 
 Required:
@@ -24,6 +26,8 @@ Required:
 Optional:
 
 - `PORT` (defaults to `3005`)
+- `USER_SERVICE_URL` (defaults to `http://localhost:3001`)
+- `INTERNAL_SERVICE_TOKEN` (required for authenticated user history reads)
 
 ## Run
 
@@ -60,6 +64,7 @@ Response:
 - Method: `POST`
 - Path: `/save-attempt`
 - Content-Type: `application/json`
+- Auth: `Authorization: Bearer <access_token>` required
 
 Required body fields:
 
@@ -134,10 +139,27 @@ Validation error (`400`):
 }
 ```
 
+Unauthorized (`401`):
+
+```json
+{
+    "message": "Missing or invalid Authorization header"
+}
+```
+
+Forbidden (`403`) when a non-admin token submits an attempt for another user:
+
+```json
+{
+    "message": "Forbidden: cannot save attempt for another user"
+}
+```
+
 ### 3) Get User Attempt History
 
 - Method: `GET`
 - Path: `/users/:userId/attempts`
+- Auth: `Authorization: Bearer <access_token>` required
 - Query params:
 - `limit` (optional, integer, min 1, max 200, default 50)
 - `skip` (optional, integer, min 0, default 0)
@@ -178,6 +200,22 @@ Validation error (`400`):
 ```json
 {
     "message": "userId is required"
+}
+```
+
+Unauthorized (`401`):
+
+```json
+{
+    "message": "Missing or invalid Authorization header"
+}
+```
+
+Forbidden (`403`) when a non-admin token requests another user's history:
+
+```json
+{
+    "message": "Forbidden: cannot access another user history"
 }
 ```
 

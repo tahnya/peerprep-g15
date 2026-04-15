@@ -2,6 +2,7 @@ export {};
 
 import type { Server } from 'http';
 import { getBaseUrl, startTestServer, stopTestServer } from '../helpers/test-server';
+import { setAuthServiceFetch } from '../../services/auth-service';
 
 type HttpMethod = 'GET' | 'POST';
 
@@ -39,11 +40,13 @@ async function request(
     method: HttpMethod,
     path: string,
     body?: Record<string, unknown>,
+    authHeader?: string,
 ): Promise<RequestResult> {
     const response = await fetch(`${baseUrl}${path}`, {
         method,
         headers: {
             'Content-Type': 'application/json',
+            ...(authHeader ? { Authorization: authHeader } : {}),
         },
         body: body ? JSON.stringify(body) : undefined,
     });
@@ -70,6 +73,19 @@ function assert(condition: unknown, message: string): asserts condition {
 function expectAttempt(value: unknown): AttemptResponse {
     assert(typeof value === 'object' && value !== null, 'Expected attempt object');
     return value as AttemptResponse;
+}
+
+function getAuthHeader(userId: string, role: 'user' | 'admin' = 'user') {
+    return `Bearer mock:${role}:${userId}`;
+}
+
+function buildAuthResolveResponse(status: number, body: unknown) {
+    return new Response(JSON.stringify(body), {
+        status,
+        headers: {
+            'Content-Type': 'application/json',
+        },
+    });
 }
 
 async function runManualTest(server: Server) {
@@ -103,7 +119,7 @@ async function runManualTest(server: Server) {
             },
         ],
         submittedAt: '2026-04-13T00:00:00.000Z',
-    });
+    }, getAuthHeader(TEST_USER_ID));
     console.log('Status:', firstSave.status);
     console.log('Body:', firstSave.body);
     assert(firstSave.status === 201, 'First save should return 201');
@@ -133,7 +149,7 @@ async function runManualTest(server: Server) {
                 status: 'Accepted',
             },
         ],
-    });
+    }, getAuthHeader(TEST_USER_ID));
     console.log('Status:', secondSave.status);
     console.log('Body:', secondSave.body);
     assert(secondSave.status === 201, 'Second save should return 201');
@@ -148,13 +164,19 @@ async function runManualTest(server: Server) {
         code: 'def reverse_string(s):\n    return s[::-1]',
         passed: true,
         submittedAt: '2026-04-13T01:00:00.000Z',
-    });
+    }, getAuthHeader('manual-user-2'));
     console.log('Status:', otherUserSave.status);
     console.log('Body:', otherUserSave.body);
     assert(otherUserSave.status === 201, 'Other user save should return 201');
 
     printStep('Step 4: Retrieve first user history');
-    const history = await request(baseUrl, 'GET', `/users/${TEST_USER_ID}/attempts`);
+    const history = await request(
+        baseUrl,
+        'GET',
+        `/users/${TEST_USER_ID}/attempts`,
+        undefined,
+        getAuthHeader(TEST_USER_ID),
+    );
     console.log('Status:', history.status);
     console.log('Body:', history.body);
     assert(history.status === 200, 'History request should return 200');
@@ -174,6 +196,8 @@ async function runManualTest(server: Server) {
         baseUrl,
         'GET',
         `/users/${TEST_USER_ID}/attempts?limit=1&skip=1`,
+        undefined,
+        getAuthHeader(TEST_USER_ID),
     );
     console.log('Status:', paginatedHistory.status);
     console.log('Body:', paginatedHistory.body);
@@ -190,6 +214,37 @@ async function main() {
     let server: Server | undefined;
     let exitCode = 0;
     try {
+        process.env.INTERNAL_SERVICE_TOKEN = process.env.INTERNAL_SERVICE_TOKEN ?? 'manual-test-token';
+
+        setAuthServiceFetch(async (_input, init) => {
+            const internalToken = init?.headers
+                ? (init.headers as Record<string, string>)['X-Internal-Service-Token']
+                : undefined;
+
+            if (internalToken !== process.env.INTERNAL_SERVICE_TOKEN) {
+                return buildAuthResolveResponse(403, {
+                    message: 'Internal token mismatch',
+                });
+            }
+
+            const body = JSON.parse(String(init?.body ?? '{}')) as { accessToken?: unknown };
+            const accessToken = typeof body.accessToken === 'string' ? body.accessToken : '';
+            const [prefix, role, userId] = accessToken.split(':');
+
+            if (prefix !== 'mock' || (role !== 'user' && role !== 'admin') || !userId) {
+                return buildAuthResolveResponse(401, {
+                    message: 'Invalid token',
+                });
+            }
+
+            return buildAuthResolveResponse(200, {
+                user: {
+                    id: userId,
+                    role,
+                },
+            });
+        });
+
         server = await startTestServer();
         await runManualTest(server);
     } catch (error) {
@@ -197,6 +252,8 @@ async function main() {
         console.error('Manual test failed:', message);
         exitCode = 1;
     } finally {
+        setAuthServiceFetch();
+
         if (server) {
             await stopTestServer(server);
         }
