@@ -155,7 +155,16 @@ Forbidden (`403`) when a non-admin token submits an attempt for another user:
 }
 ```
 
-### 3) Get User Attempt History
+### 3) Internal Save Attempt (Service-to-Service)
+
+- Method: `POST`
+- Path: `/internal/save-attempt`
+- Auth header: `x-internal-service-token: <INTERNAL_SERVICE_TOKEN>` required
+- Intended caller: internal services such as collaboration-service
+
+This endpoint bypasses user bearer auth and user self/admin checks, but still enforces the same body validation as `/save-attempt`.
+
+### 4) Get User Attempt History
 
 - Method: `GET`
 - Path: `/users/:userId/attempts`

@@ -171,7 +171,7 @@ export async function saveAttemptForAllUsersInHistory(
     };
 
     const requests = session.userIds.map(async (userId) => {
-        const response = await fetch(`${config.historyService.baseUrl}/save-attempt`, {
+        const response = await fetch(`${config.historyService.baseUrl}/internal/save-attempt`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

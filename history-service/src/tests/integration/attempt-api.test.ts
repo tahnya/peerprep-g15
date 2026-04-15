@@ -375,5 +375,32 @@ describe('Attempt API Integration', () => {
             expect(response.status).toBe(201);
             expect(response.body.attempt.userId).toBe('admin-target-user');
         });
+
+        it('should reject internal save without internal token', async () => {
+            const response = await request(server).post('/internal/save-attempt').send({
+                userId: 'internal-user',
+                language: 'typescript',
+                code: 'const x = 1;',
+                passed: true,
+            });
+
+            expect(response.status).toBe(403);
+            expect(response.body.message).toBe('Forbidden');
+        });
+
+        it('should allow internal save with valid internal token', async () => {
+            const response = await request(server)
+                .post('/internal/save-attempt')
+                .set('x-internal-service-token', process.env.INTERNAL_SERVICE_TOKEN as string)
+                .send({
+                    userId: 'internal-user',
+                    language: 'typescript',
+                    code: 'const x = 1;',
+                    passed: true,
+                });
+
+            expect(response.status).toBe(201);
+            expect(response.body.attempt.userId).toBe('internal-user');
+        });
     });
 });
