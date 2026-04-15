@@ -55,7 +55,9 @@ export function requireSelfOrAdmin(paramName = 'userId') {
 
         const requestedUserId = req.params[paramName];
         if (auth.role !== 'admin' && auth.userId !== requestedUserId) {
-            return res.status(403).json({ message: 'Forbidden: cannot access another user history' });
+            return res
+                .status(403)
+                .json({ message: 'Forbidden: cannot access another user history' });
         }
 
         return next();
@@ -78,7 +80,9 @@ export function requireBodySelfOrAdmin(fieldName = 'userId') {
         }
 
         if (auth.role !== 'admin' && auth.userId !== requestedUserId) {
-            return res.status(403).json({ message: 'Forbidden: cannot save attempt for another user' });
+            return res
+                .status(403)
+                .json({ message: 'Forbidden: cannot save attempt for another user' });
         }
 
         return next();
